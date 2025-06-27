@@ -1,0 +1,153 @@
+2025-06-27 17:59:12.653 [info] [main] Log level: Info
+2025-06-27 17:59:12.653 [info] [main] Validating found git in: "git"
+2025-06-27 17:59:12.653 [info] [main] Using git "2.50.0" from "git"
+2025-06-27 17:59:12.653 [info] [Model][doInitialScan] Initial repository scan started
+2025-06-27 17:59:12.653 [info] > git rev-parse --show-toplevel [11ms]
+2025-06-27 17:59:12.653 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.653 [info] > git rev-parse --show-toplevel [4ms]
+2025-06-27 17:59:12.653 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.653 [info] > git rev-parse --show-toplevel [1ms]
+2025-06-27 17:59:12.653 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.653 [info] > git rev-parse --show-toplevel [2ms]
+2025-06-27 17:59:12.653 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.653 [info] > git rev-parse --show-toplevel [1ms]
+2025-06-27 17:59:12.653 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.653 [info] > git rev-parse --show-toplevel [2ms]
+2025-06-27 17:59:12.653 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.653 [info] > git rev-parse --show-toplevel [1ms]
+2025-06-27 17:59:12.653 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.653 [info] > git rev-parse --show-toplevel [2ms]
+2025-06-27 17:59:12.653 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.653 [info] > git rev-parse --show-toplevel [1ms]
+2025-06-27 17:59:12.653 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.653 [info] > git rev-parse --show-toplevel [2ms]
+2025-06-27 17:59:12.653 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.653 [info] > git rev-parse --show-toplevel [34ms]
+2025-06-27 17:59:12.712 [info] > git rev-parse --git-dir --git-common-dir [52ms]
+2025-06-27 17:59:12.729 [info] [Model][openRepository] Opened repository (path): /home/monarch/.oh-my-zsh
+2025-06-27 17:59:12.729 [info] [Model][openRepository] Opened repository (real path): /home/monarch/.oh-my-zsh
+2025-06-27 17:59:12.766 [info] > git rev-parse --show-toplevel [16ms]
+2025-06-27 17:59:12.766 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.767 [info] > git config --get commit.template [26ms]
+2025-06-27 17:59:12.795 [info] > git rev-parse --show-toplevel [19ms]
+2025-06-27 17:59:12.795 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.803 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/master refs/remotes/master [19ms]
+2025-06-27 17:59:12.804 [info] > git rev-parse --show-toplevel [2ms]
+2025-06-27 17:59:12.804 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.833 [info] > git rev-parse --show-toplevel [20ms]
+2025-06-27 17:59:12.833 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.845 [info] > git rev-parse --show-toplevel [3ms]
+2025-06-27 17:59:12.845 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.845 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [14ms]
+2025-06-27 17:59:12.855 [info] > git rev-parse --show-toplevel [2ms]
+2025-06-27 17:59:12.855 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.865 [info] > git rev-parse --show-toplevel [2ms]
+2025-06-27 17:59:12.865 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.870 [info] > git rev-parse --show-toplevel [1ms]
+2025-06-27 17:59:12.870 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.879 [info] > git rev-parse --show-toplevel [2ms]
+2025-06-27 17:59:12.879 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.885 [info] > git rev-parse --show-toplevel [1ms]
+2025-06-27 17:59:12.885 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.893 [info] > git rev-parse --show-toplevel [3ms]
+2025-06-27 17:59:12.893 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.900 [info] > git rev-parse --show-toplevel [1ms]
+2025-06-27 17:59:12.900 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.906 [info] > git rev-parse --show-toplevel [2ms]
+2025-06-27 17:59:12.906 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.913 [info] > git rev-parse --show-toplevel [2ms]
+2025-06-27 17:59:12.913 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.920 [info] > git rev-parse --show-toplevel [1ms]
+2025-06-27 17:59:12.920 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:12.929 [info] > git rev-parse --show-toplevel [2ms]
+2025-06-27 17:59:12.935 [info] > git rev-parse --git-dir --git-common-dir [1ms]
+2025-06-27 17:59:12.945 [info] [Model][openRepository] Opened repository (path): /home/monarch/sddm-eucalyptus-drop
+2025-06-27 17:59:12.945 [info] [Model][openRepository] Opened repository (real path): /home/monarch/sddm-eucalyptus-drop
+2025-06-27 17:59:12.971 [info] > git config --get commit.template [15ms]
+2025-06-27 17:59:12.976 [info] > git rev-parse --show-toplevel [9ms]
+2025-06-27 17:59:12.996 [info] > git rev-parse --git-dir --git-common-dir [2ms]
+2025-06-27 17:59:13.005 [info] [Model][openRepository] Opened repository (path): /home/monarch/waydroid_script
+2025-06-27 17:59:13.005 [info] [Model][openRepository] Opened repository (real path): /home/monarch/waydroid_script
+2025-06-27 17:59:13.005 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/master refs/remotes/master [19ms]
+2025-06-27 17:59:13.028 [warning] [Git][revParse] Unable to read file: ENOENT: no such file or directory, open '/home/monarch/sddm-eucalyptus-drop/.git/refs/remotes/origin/master'
+2025-06-27 17:59:13.030 [info] > git rev-parse refs/remotes/origin/master [2ms]
+2025-06-27 17:59:13.042 [info] > git rev-parse --show-toplevel [21ms]
+2025-06-27 17:59:13.043 [info] > git config --get commit.template [30ms]
+2025-06-27 17:59:13.052 [info] > git status -z -uall [17ms]
+2025-06-27 17:59:13.053 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [11ms]
+2025-06-27 17:59:13.084 [info] > git status -z -uall [263ms]
+2025-06-27 17:59:13.084 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/master refs/remotes/master [17ms]
+2025-06-27 17:59:13.091 [info] > git rev-parse --git-dir --git-common-dir [39ms]
+2025-06-27 17:59:13.099 [info] [Model][openRepository] Opened repository (path): /home/monarch/yay
+2025-06-27 17:59:13.099 [info] [Model][openRepository] Opened repository (real path): /home/monarch/yay
+2025-06-27 17:59:13.100 [info] [Model][doInitialScan] Initial repository scan completed - repositories (4), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2025-06-27 17:59:13.137 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/master refs/remotes/master [25ms]
+2025-06-27 17:59:13.146 [info] > git config --get --local branch.master.vscode-merge-base [56ms]
+2025-06-27 17:59:13.146 [warning] [Git][config] git config failed: Failed to execute git
+2025-06-27 17:59:13.152 [info] > git config --get commit.template [69ms]
+2025-06-27 17:59:13.152 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [75ms]
+2025-06-27 17:59:13.163 [warning] [Git][revParse] Unable to read file: ENOENT: no such file or directory, open '/home/monarch/waydroid_script/.git/refs/remotes/origin/main'
+2025-06-27 17:59:13.164 [info] > git reflog master --grep-reflog=branch: Created from *. [12ms]
+2025-06-27 17:59:13.169 [info] > git config --get --local branch.master.vscode-merge-base [23ms]
+2025-06-27 17:59:13.176 [info] > git config --get commit.template [40ms]
+2025-06-27 17:59:13.176 [info] > git rev-parse --show-toplevel [46ms]
+2025-06-27 17:59:13.176 [info] fatal: not a git repository (or any of the parent directories): .git
+2025-06-27 17:59:13.176 [info] > git config --get commit.template [55ms]
+2025-06-27 17:59:13.186 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/origin/master refs/remotes/origin/master [10ms]
+2025-06-27 17:59:13.195 [info] > git symbolic-ref --short refs/remotes/origin/HEAD [27ms]
+2025-06-27 17:59:13.199 [info] > git rev-parse refs/remotes/origin/main [36ms]
+2025-06-27 17:59:13.254 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [44ms]
+2025-06-27 17:59:13.254 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/origin/master refs/remotes/origin/master [55ms]
+2025-06-27 17:59:13.261 [info] > git merge-base refs/heads/master refs/remotes/origin/master [66ms]
+2025-06-27 17:59:13.266 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/master refs/remotes/master [81ms]
+2025-06-27 17:59:13.274 [warning] [Git][revParse] Unable to read file: ENOENT: no such file or directory, open '/home/monarch/sddm-eucalyptus-drop/.git/refs/remotes/origin/master'
+2025-06-27 17:59:13.276 [info] > git status -z -uall [73ms]
+2025-06-27 17:59:13.276 [info] > git diff --name-status -z --diff-filter=ADMR f8022980a3423f25e3d5e1b6a60d2372a2ba006b...refs/remotes/origin/master [10ms]
+2025-06-27 17:59:13.277 [info] > git config --add --local branch.master.vscode-merge-base origin/master [17ms]
+2025-06-27 17:59:13.277 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/master refs/remotes/master [24ms]
+2025-06-27 17:59:13.277 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/master refs/remotes/master [29ms]
+2025-06-27 17:59:13.297 [warning] [Git][revParse] Unable to read file: ENOENT: no such file or directory, open '/home/monarch/yay/.git/refs/remotes/origin/master'
+2025-06-27 17:59:13.302 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [17ms]
+2025-06-27 17:59:13.307 [info] > git rev-parse refs/remotes/origin/master [33ms]
+2025-06-27 17:59:13.318 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/master refs/remotes/master [4ms]
+2025-06-27 17:59:13.323 [info] > git config --get --local branch.main.vscode-merge-base [16ms]
+2025-06-27 17:59:13.330 [info] > git config --get commit.template [29ms]
+2025-06-27 17:59:13.330 [info] > git rev-parse refs/remotes/origin/master [33ms]
+2025-06-27 17:59:13.339 [info] > git config --get commit.template [47ms]
+2025-06-27 17:59:13.342 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/origin/main refs/remotes/origin/main [11ms]
+2025-06-27 17:59:13.348 [info] > git config --get --local branch.master.vscode-merge-base [25ms]
+2025-06-27 17:59:13.375 [info] > git merge-base refs/heads/main refs/remotes/origin/main [28ms]
+2025-06-27 17:59:13.383 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [11ms]
+2025-06-27 17:59:13.383 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [15ms]
+2025-06-27 17:59:13.384 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/master refs/remotes/master [27ms]
+2025-06-27 17:59:13.384 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [45ms]
+2025-06-27 17:59:13.384 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/origin/master refs/remotes/origin/master [32ms]
+2025-06-27 17:59:13.395 [warning] [Git][revParse] Unable to read file: ENOENT: no such file or directory, open '/home/monarch/waydroid_script/.git/refs/remotes/origin/main'
+2025-06-27 17:59:13.415 [warning] [Git][revParse] Unable to read file: ENOENT: no such file or directory, open '/home/monarch/sddm-eucalyptus-drop/.git/refs/remotes/origin/master'
+2025-06-27 17:59:13.416 [info] > git status -z -uall [82ms]
+2025-06-27 17:59:13.416 [info] > git status -z -uall [53ms]
+2025-06-27 17:59:13.416 [info] > git diff --name-status -z --diff-filter=ADMR 32d21c8074c17bfbab70f7158b80464227821424...refs/remotes/origin/main [35ms]
+2025-06-27 17:59:13.418 [info] > git rev-parse refs/remotes/origin/master [3ms]
+2025-06-27 17:59:13.429 [info] > git rev-parse refs/remotes/origin/main [34ms]
+2025-06-27 17:59:13.456 [info] > git merge-base refs/heads/master refs/remotes/origin/master [67ms]
+2025-06-27 17:59:13.479 [info] > git status -z -uall [57ms]
+2025-06-27 17:59:13.479 [info] > git status -z -uall [45ms]
+2025-06-27 17:59:13.479 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/master refs/remotes/master [25ms]
+2025-06-27 17:59:13.485 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [44ms]
+2025-06-27 17:59:13.486 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [57ms]
+2025-06-27 17:59:13.503 [info] > git merge-base refs/heads/master refs/remotes/origin/master [3ms]
+2025-06-27 17:59:13.511 [info] > git merge-base refs/heads/master refs/remotes/origin/master [16ms]
+2025-06-27 17:59:13.519 [info] > git config --get --local branch.master.vscode-merge-base [34ms]
+2025-06-27 17:59:13.528 [info] > git config --get commit.template [57ms]
+2025-06-27 17:59:13.533 [info] > git diff --name-status -z --diff-filter=ADMR 0b82ca465b7dac6d7ff15ebaf1b2f26daba5d126...refs/remotes/origin/master [68ms]
+2025-06-27 17:59:13.536 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/origin/master refs/remotes/origin/master [8ms]
+2025-06-27 17:59:13.545 [info] > git diff --name-status -z --diff-filter=ADMR 0b82ca465b7dac6d7ff15ebaf1b2f26daba5d126...refs/remotes/origin/master [26ms]
+2025-06-27 17:59:13.546 [info] > git diff --name-status -z --diff-filter=ADMR 0b82ca465b7dac6d7ff15ebaf1b2f26daba5d126...refs/remotes/origin/master [36ms]
+2025-06-27 17:59:13.555 [info] > git merge-base refs/heads/master refs/remotes/origin/master [11ms]
+2025-06-27 17:59:13.566 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/master refs/remotes/master [12ms]
+2025-06-27 17:59:13.572 [warning] [Git][revParse] Unable to read file: ENOENT: no such file or directory, open '/home/monarch/yay/.git/refs/remotes/origin/master'
+2025-06-27 17:59:13.573 [info] > git diff --name-status -z --diff-filter=ADMR 59714d8ae3dc1e5790228c1faeef8283b0c0101f...refs/remotes/origin/master [10ms]
+2025-06-27 17:59:13.575 [info] > git rev-parse refs/remotes/origin/master [3ms]
+2025-06-27 17:59:13.589 [info] > git status -z -uall [7ms]
+2025-06-27 17:59:13.593 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [5ms]
+2025-06-27 17:59:18.264 [info] > git check-ignore -v -z --stdin [6ms]

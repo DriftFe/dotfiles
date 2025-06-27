@@ -1,0 +1,81 @@
+{
+  "layer": "top",
+  "position": "top",
+  "height": 30,
+  "modules-left": ["workspaces"],
+  "modules-center": ["clock"],
+  "modules-right": [
+    "network",
+    "bluetooth",
+    "battery",
+    "pulseaudio",
+    "custom/brightness",
+    "tray"
+  ],
+
+  "workspaces": {
+    "disable-scroll": false, 
+    "all-outputs": true,
+    "format": "{icon}",
+    "format-icons": {
+      "1": "",
+      "2": "",
+      "3": "",
+      "4": "",
+      "5": "",
+      "focused": "",
+      "default": ""
+    }
+  },
+
+  "clock": {
+    "format": "  {:%a %d %b %H:%M}",
+    "tooltip-format": "{:%Y-%m-%d | %H:%M}"
+  },
+
+   "tray": {
+    "spacing": 10
+  },
+
+  "bluetooth": {
+    "format": " {status}",
+    "format-disabled": "",
+    "format-off": "",
+    "format-on": "",
+    "format-connected": " {device_alias}",
+    "on-click": "blueman-manager"
+  },
+
+  "battery": {
+    "format": "{capacity}% {icon}",
+    "format-charging": " {capacity}% {icon}",
+    "format-icons": ["", "", "", "", ""]
+  },
+
+  "pulseaudio": {
+    "format": "{volume}% {icon}",
+    "format-muted": "",
+    "format-icons": {
+      "headphones": "",
+      "handsfree": "",
+      "headset": "",
+      "phone": "",
+      "portable": "",
+      "car": "",
+      "default": ["", ""]
+    },
+    "on-click": "pavucontrol"
+  },
+
+  "custom/brightness": {
+    "format": " {percentage}%",
+    "interval": 2,
+    "return-type": "json",
+    "exec": "~/.config/waybar/scripts/brightness_json.sh",
+    "on-scroll-up": "brightnessctl set +5%",
+    "on-scroll-down": "brightnessctl set 5%-",
+    "tooltip": "Scroll to adjust brightness"
+  }
+
+ 
+}

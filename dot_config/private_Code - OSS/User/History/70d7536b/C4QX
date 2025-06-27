@@ -1,0 +1,67 @@
+{
+    "layer": "top",
+    "position": "top",
+    "height": 32,
+    "spacing": 6,
+
+    "modules-left": [
+        "hyprland/workspaces"
+    ],
+
+    "modules-center": [
+        "clock"
+    ],
+
+    "modules-right": [
+        "custom-wifi",
+        "bluetooth",
+        "battery",
+        "pulseaudio",
+        "custom-brightness",
+        "tray"
+    ],
+
+    "clock": {
+        "format": "{:%a %d %b %H:%M}",
+        "tooltip-format": "{:%A, %d %B %Y | %H:%M:%S}"
+    },
+
+    "custom-wifi": {
+        "format": "  {essid}",
+        "tooltip": true,
+        "exec": "iwgetid -r",
+        "interval": 10
+    },
+
+    "bluetooth": {
+        "format": "  {status}",
+        "interval": 20
+    },
+
+    "battery": {
+        "format": "{icon} {capacity}%",
+        "format-charging": " {capacity}%",
+        "format-icons": ["", "", "", "", ""],
+        "interval": 30
+    },
+
+    "pulseaudio": {
+        "format": "{icon} {volume}%",
+        "format-muted": "",
+        "format-icons": {
+            "default": ["", "", ""]
+        },
+        "scroll-step": 5
+    },
+
+    "custom-brightness": {
+        "format": " {percent}%",
+        "exec": "brightnessctl get",
+        "interval": 10
+    },
+
+    "tray": {
+        "icon-size": 16,
+        "spacing": 8
+    }
+}

@@ -1,0 +1,40 @@
+add_newline = true
+
+format = """
+[•](bold purple) [>~<](bold violet) [$username$hostname]($style_user)[$directory]($directory_style)$git_branch[•](bold purple)
+$character
+"""
+
+[username]
+show_always = true
+format = "[$user]($style_user)"
+style_user = "bold purple"
+
+[hostname]
+ssh_only = false
+format = "[@$hostname](bold purple)"
+style = "bold purple"
+
+[directory]
+style = "cyan"
+format = "[$path]($style)"
+truncation_length = 3
+truncation_symbol = "…"
+
+[git_branch]
+symbol = " "
+style = "bold violet"
+format = "[$symbol$branch]($style) "
+
+[character]
+success_symbol = "[❯](bold purple)"
+error_symbol = "[✗](bold red)"
+
+[jobs]
+disabled = true
+
+[package]
+disabled = true
+
+[time]
+disabled = true

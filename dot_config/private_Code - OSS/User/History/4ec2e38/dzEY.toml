@@ -1,0 +1,48 @@
+# Add a newline before the prompt for spacing
+add_newline = true
+
+# Minimal prompt format: user@host, directory, git branch, and prompt character
+format = """
+[$username@$hostname]($style) [$directory]($directory_style) $git_branch$character
+"""
+
+# Style for the username@hostname
+[username]
+style = "bold purple"
+format = "[$user]($style)"
+
+[hostname]
+ssh_only = false
+style = "bold purple"
+format = "[@$hostname]($style)"
+
+# Style for the directory path
+[directory]
+style = "cyan"
+format = "[$path]($style)"
+truncation_length = 3
+truncation_symbol = "…"
+
+# Git branch info, shown only if inside a git repo
+[git_branch]
+symbol = " "
+style = "bold violet"
+format = "[$symbol$branch]($style) "
+
+# Prompt character with color indicating success or failure
+[character]
+success_symbol = "[❯](bold violet)"
+error_symbol = "[✗](bold red)"
+
+# Disable modules you don't want (optional)
+[cmd_duration]
+disabled = true
+
+[job]
+disabled = true
+
+[package]
+disabled = true
+
+[time]
+disabled = true

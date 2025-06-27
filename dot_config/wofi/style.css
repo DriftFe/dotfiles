@@ -1,0 +1,63 @@
+window {
+  background-color: rgba(42, 24, 54, 0.92); /* deep violet, semi-transparent */
+  border-radius: 16px;
+  border: 2px solid #a78bfa;                /* soft purple border */
+  font-family: "Roboto", "Font Awesome 6 Free", "FiraCode Nerd Font", "JetBrains Mono", "sans-serif";
+  color: #e0e0ff;
+  box-shadow: 0 8px 32px 0 rgba(80, 60, 120, 0.35);
+  padding: 0px;
+}
+
+#outer-box {
+  background-color: transparent;
+  border-radius: 16px;
+  padding: 8px;
+}
+
+#input {
+  background-color: #3d246c;
+  color: #e0e0ff;
+  border-radius: 12px;
+  border: 1px solid #a78bfa;
+  padding: 10px 16px;
+  margin: 18px 18px 10px 18px;
+  font-size: 1.1em;
+  outline: none;
+}
+
+#prompt {
+  color: #cba6f7;
+  font-weight: bold;
+  font-size: 1.1em;
+  padding-left: 18px;
+  padding-top: 12px;
+  border-radius: 10px;
+}
+
+#scroll {
+  border-radius: 14px;
+  background: transparent;
+}
+
+#entry {
+  background-color: transparent;
+  color: #e0e0ff;
+  border-radius: 10px;
+  padding: 10px 18px;
+  margin: 3px 18px;
+  font-size: 1em;
+  transition: background 0.2s, color 0.2s;
+  border: none;
+}
+
+#entry:selected {
+  background-color: #a78bfa;   /* soft purple highlight */
+  color: #2a1836;
+  font-weight: bold;
+  border-radius: 10px;
+}
+
+#img {
+  margin-right: 10px;
+  border-radius: 8px;
+}
