@@ -28,7 +28,6 @@ packages_pacman=(
   gtk3
   gtk4
   playerctl
-  wofi-emoji
 )
 
 # AUR packages (installed via yay)
