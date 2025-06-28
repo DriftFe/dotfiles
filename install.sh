@@ -13,6 +13,7 @@ packages_pacman=(
   waybar
   kitty
   zsh
+  thunar
   wofi
   sddm
   fastfetch
