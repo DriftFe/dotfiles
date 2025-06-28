@@ -1,2 +1,0 @@
-2025-06-27 18:19:17.304 [error] [File Watcher ('parcel')] Unexpected error: inotify_add_watch on '/home/monarch/.config/Code - OSS/logs/20250627T144316' failed: No such file or directory (EUNKNOWN) (path: /home/monarch)
-2025-06-27 18:19:17.304 [error] [File Watcher (universal)] inotify_add_watch on '/home/monarch/.config/Code - OSS/logs/20250627T144316' failed: No such file or directory

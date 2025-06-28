@@ -13,6 +13,7 @@ packages_pacman=(
   waybar
   kitty
   zsh
+  thunar
   wofi
   sddm
   fastfetch
@@ -24,10 +25,12 @@ packages_pacman=(
   curl
   wget
   git
-  thunar
   gtk3
   gtk4
   playerctl
+  nano
+  vim
+  flatpak
   hyprpaper
   hyprlock
   noto-fonts
@@ -42,18 +45,27 @@ packages_pacman=(
 # AUR packages (installed via yay)
 packages_aur=(
   cava
+  cbonsai
+  wofi-emoji
   neofetch
   ttf-font-awesome-5
   ttf-font-awesome-6
   nerd-fonts-fira-code
   starship
+  touchegg
+  waypaper
   oh-my-zsh-git
   zsh-theme-powerlevel10k-git
   gpu-screen-recorder
-  grim
+  grimblast
   satty
   bibata-cursor-theme
   network-manager-applet
+  zen-browser-bin
+  spotify
+  waydroid
+  vesktop
+  visual-studio-code-bin
 )
 
 echo "[*] Installing pacman packages..."
@@ -79,10 +91,16 @@ sudo systemctl enable sddm
 # Set default shell to zsh
 chsh -s "$(which zsh)"
 
-# Install Oh My Zsh (if not already installed, but we'll copy customizations next)
+# Install Oh My Zsh (if not already installed)
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
   echo "[*] Installing Oh My Zsh..."
   sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+fi
+
+# Install Powerlevel10k theme for Oh My Zsh
+if [ ! -d "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k" ]; then
+  echo "[*] Cloning Powerlevel10k theme for Oh My Zsh..."
+  git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k"
 fi
 
 # Install Starship
@@ -108,14 +126,25 @@ if [ -d "./dot_config" ]; then
   # Copy everything except .zshrc and .oh-my-zsh (handled separately for clarity)
   mkdir -p ~/.config
   rsync -av --exclude=".zshrc" --exclude=".oh-my-zsh" ./dot_config/ ~/.config/
-  # Copy .zshrc if present
+  # Copy .zshrc if present, replacing any existing one
   if [ -f "./dot_config/.zshrc" ]; then
-    cp ./dot_config/.zshrc ~/
+    echo "[*] Replacing ~/.zshrc with your custom version..."
+    cp -f ./dot_config/.zshrc ~/.zshrc
   fi
   # Copy .oh-my-zsh if present
   if [ -d "./dot_config/.oh-my-zsh" ]; then
+    echo "[*] Copying Oh My Zsh customizations..."
     mkdir -p ~/.oh-my-zsh
     rsync -av ./dot_config/.oh-my-zsh/ ~/.oh-my-zsh/
+  fi
+fi
+
+# Ensure Powerlevel10k theme is set in .zshrc
+if [ -f ~/.zshrc ]; then
+  if grep -q '^ZSH_THEME=' ~/.zshrc; then
+    sed -i 's|^ZSH_THEME=.*|ZSH_THEME="powerlevel10k/powerlevel10k"|' ~/.zshrc
+  else
+    echo 'ZSH_THEME="powerlevel10k/powerlevel10k"' >> ~/.zshrc
   fi
 fi
 
