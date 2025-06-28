@@ -113,13 +113,15 @@ fi
 
 # Setup wallpaper folder and copy wallpaper
 mkdir -p ~/.wallpapers
-if [ -f "./wallpaper.jpg" ]; then
-  echo "[*] Copying wallpaper..."
-  cp ./wallpaper.jpg ~/.wallpapers/
-elif [ -f "./wallpaper.png" ]; then
-  cp ./wallpaper.png ~/.wallpapers/
-else
-  echo "[!] No wallpaper file found in current directory."
+
+if [ -f "./dot_config/wallpaper.jpg" ]; then
+  echo "[*] Copying wallpaper.jpg from dot_config..."
+  cp ./dot_config/wallpaper.jpg ~/.wallpapers/
+elif [ -f "./dot_config/wallpaper.png" ]; then
+  echo "[*] Copying wallpaper.png from dot_config..."
+  cp ./dot_config/wallpaper.png ~/.wallpapers/
+else  
+  echo "[!] No wallpaper.jpg or wallpaper.png found in dot_config."
 fi
 
 # Copy all configs from dot_config
