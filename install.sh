@@ -28,9 +28,6 @@ packages_pacman=(
   gtk3
   gtk4
   playerctl
-  nano
-  vim
-  flatpak
   hyprpaper
   hyprlock
   noto-fonts
