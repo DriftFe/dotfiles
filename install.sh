@@ -28,6 +28,9 @@ packages_pacman=(
   gtk3
   gtk4
   playerctl
+  nano
+  vim
+  flatpak
   hyprpaper
   hyprlock
   noto-fonts
@@ -63,6 +66,8 @@ packages_aur=(
   waydroid
   vesktop
   visual-studio-code-bin
+  zsh-autosuggestions
+  zsh-syntax-highlighting
 )
 
 echo "[*] Installing pacman packages..."
@@ -143,6 +148,23 @@ if [ -f ~/.zshrc ]; then
   else
     echo 'ZSH_THEME="powerlevel10k/powerlevel10k"' >> ~/.zshrc
   fi
+fi
+
+# Ensure plugins are enabled in .zshrc
+if [ -f ~/.zshrc ]; then
+  if grep -q '^plugins=' ~/.zshrc; then
+    sed -i 's|^plugins=.*|plugins=(git zsh-autosuggestions zsh-syntax-highlighting)|' ~/.zshrc
+  else
+    echo 'plugins=(git zsh-autosuggestions zsh-syntax-highlighting)' >> ~/.zshrc
+  fi
+fi
+
+# Source autosuggestions and syntax-highlighting if installed via package manager
+if ! grep -q 'zsh-autosuggestions.zsh' ~/.zshrc; then
+  echo 'source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh' >> ~/.zshrc
+fi
+if ! grep -q 'zsh-syntax-highlighting.zsh' ~/.zshrc; then
+  echo 'source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh' >> ~/.zshrc
 fi
 
 echo "[+] All done!!! You can now reboot into your Hyprland setup, for keybinds, refer to ~/.config/hypr/keys.conf :3"
