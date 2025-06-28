@@ -53,6 +53,8 @@ packages_aur=(
   ttf-font-awesome-6
   nerd-fonts-fira-code
   starship
+  touchegg
+  waypaper
   oh-my-zsh-git
   zsh-theme-powerlevel10k-git
   gpu-screen-recorder
