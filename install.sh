@@ -58,7 +58,7 @@ packages_aur=(
   zsh-theme-powerlevel10k-git
   gpu-screen-recorder
   grimblast
-  satty
+  swappy
   bibata-cursor-theme
   network-manager-applet
   zen-browser-bin
