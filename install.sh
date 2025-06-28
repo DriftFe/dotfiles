@@ -42,6 +42,8 @@ packages_pacman=(
 # AUR packages (installed via yay)
 packages_aur=(
   cava
+  cbonsai
+  wofi-emoji
   neofetch
   ttf-font-awesome-5
   ttf-font-awesome-6
@@ -50,7 +52,7 @@ packages_aur=(
   oh-my-zsh-git
   zsh-theme-powerlevel10k-git
   gpu-screen-recorder
-  grim
+  grimblast
   satty
   bibata-cursor-theme
   network-manager-applet
