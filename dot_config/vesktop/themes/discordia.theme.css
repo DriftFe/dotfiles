@@ -1,0 +1,111 @@
+/**
+ * @name Lande della Discordia (Ultra Dark Lavender JetBrains Edition, DM Icon: >~<)
+ * @version 1.1.5-lavender-ultradark-texticon-working
+ * @description Ultra-dark lavender theme with JetBrains Mono font and DM icon replaced with ">~<". Fully working with 2025 Discord layout.
+ */
+
+@import url("https://ungiglio.github.io/DiscordDiscordia/AWKGLASS/v2.awkglass.css");
+@import url("https://ungiglio.github.io/DiscordDiscordia/awkglass_code/colored_mentions/mentions.css");
+@import url("https://ungiglio.github.io/DiscordDiscordia/awkglass_code/colored_userlist/userlist.css");
+@import url("https://ungiglio.github.io/DiscordDiscordia/awkglass_code/title_bar/custom_title.css");
+
+/* CUSTOMIZATION CONTROL CENTER */
+:root {
+  --rgb-highlight: 133,0,238;
+  --rgb-close-button: 224, 58, 62;
+  --rgb-online-color: 31, 92, 171;
+  --rgb-afk-color: 220, 163, 46;
+  --rgb-dnd-color: 224, 58, 62;
+  --rgb-streaming-color: 188, 19, 254;
+  --status-danger-rgb: rgb(152, 51, 255);
+
+  --transition-time: .3s;
+
+  --custom-title-text: ">~<";
+  --custom-title-font-size: 14px;
+  --custom-title-font-family: "JetBrains Mono", "Fira Mono", "monospace", monospace;
+
+  --custom-channel-header-color: rgb(200, 180, 255);
+  --custom-channel-icon: rgb(130, 80, 190);
+  --channel-icon: rgb(130, 80, 190) !important;
+  --custom-selected-channel-color: rgb(88, 60, 160);
+  --cat-custom-color-rgba: 70, 60, 110;
+  --cat-custom-color: rgb(var(--cat-custom-color-rgba));
+
+  --custom-spoiler-color: rgb(148, 83, 212)!important;
+
+  --darkPurple-background: rgb(35, 33, 54);
+
+  /* ULTRA DARK LAVENDER BLURRED BACKGROUND */
+  --custom-image-url: linear-gradient(120deg, #181521 0%, #232136 40%, #2a273f 70%, #6c5dd3 100%);
+  --app-blur: 10px;
+
+  /* FONTS: Use JetBrains Mono everywhere */
+  --font-primary: 'JetBrains Mono', 'Fira Mono', 'monospace', monospace;
+  --font-display: 'JetBrains Mono', 'Fira Mono', 'monospace', monospace;
+  --font-headline: 'JetBrains Mono', 'Fira Mono', 'monospace', monospace;
+  --font-code: 'JetBrains Mono', 'Fira Mono', 'monospace', monospace;
+  --font-clan-body: 'JetBrains Mono', 'Fira Mono', 'monospace', monospace;
+  --font-clan-signature: 'JetBrains Mono', 'Fira Mono', 'monospace', monospace;
+  --font-display-marketing: 'JetBrains Mono', 'Fira Mono', 'monospace', monospace;
+
+  --current-ver: "1.1.5-lavender-ultradark-texticon-working";
+}
+
+/* JetBrains Mono everywhere */
+body, .appMount-2yBXZl, .chatContent-3KubbW, .sidebar-1tnWFu, .panels-3wFtMD,
+input, textarea, button, .title-31SJ6t, .messageContent-2t3eCI {
+  font-family: 'JetBrains Mono', 'Fira Mono', 'monospace', monospace !important;
+  letter-spacing: 0.01em;
+}
+
+/* --- DM/HOME ICON replaced with >~< text --- */
+[aria-label="Direct Messages"] .listItemWrapper-3X98Pc {
+  position: relative !important;
+}
+
+[aria-label="Direct Messages"] .listItemWrapper-3X98Pc .childWrapper-1j_1ub {
+  background: #5865F2 !important;
+  border-radius: 30% !important;
+  color: white !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 18px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+/* Hide original icon */
+[aria-label="Direct Messages"] .listItemWrapper-3X98Pc .childWrapper-1j_1ub svg {
+  display: none !important;
+}
+
+/* Show >~< instead */
+[aria-label="Direct Messages"] .listItemWrapper-3X98Pc .childWrapper-1j_1ub::after {
+  content: ">~<";
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Optional AMOLED overlay */
+/*
+.theme-dark .appMount-2yBXZl::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(120deg, #181521 0%, #232136 40%, #2a273f 70%, #6c5dd3 100%);
+  opacity: 0.93;
+  pointer-events: none;
+}
+*/
