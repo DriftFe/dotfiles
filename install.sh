@@ -28,6 +28,10 @@ packages_pacman=(
   gtk3
   gtk4
   playerctl
+  nano
+  git
+  vim
+  flatpak
   hyprpaper
   hyprlock
   noto-fonts
@@ -56,6 +60,11 @@ packages_aur=(
   satty
   bibata-cursor-theme
   network-manager-applet
+  zen-browser-bin
+  spotify
+  waydroid
+  vesktop
+  visual-studio-code-bin
 )
 
 echo "[*] Installing pacman packages..."
