@@ -13,9 +13,10 @@ packages_pacman=(
   waybar
   kitty
   zsh
-  thunar
+  nautilus
   wofi
   sddm
+  nautilus
   fastfetch
   mpv
   htop
