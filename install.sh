@@ -16,7 +16,6 @@ packages_pacman=(
   nautilus
   wofi
   sddm
-  nautilus
   fastfetch
   mpv
   htop
@@ -67,8 +66,6 @@ packages_aur=(
   waydroid
   vesktop
   visual-studio-code-bin
-  zsh-autosuggestions
-  zsh-syntax-highlighting
 )
 
 echo "[*] Installing pacman packages..."
@@ -103,7 +100,22 @@ fi
 # Install Powerlevel10k theme for Oh My Zsh
 if [ ! -d "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k" ]; then
   echo "[*] Cloning Powerlevel10k theme for Oh My Zsh..."
-  git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k"
+  git clone --depth=1 https://github.com/romkatv/powerlevel10k.git \
+    "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k"
+fi
+
+# Clone autosuggestions plugin
+if [ ! -d "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions" ]; then
+  echo "[*] Cloning zsh-autosuggestions..."
+  git clone https://github.com/zsh-users/zsh-autosuggestions \
+    "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions"
+fi
+
+# Clone syntax-highlighting plugin
+if [ ! -d "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting" ]; then
+  echo "[*] Cloning zsh-syntax-highlighting..."
+  git clone https://github.com/zsh-users/zsh-syntax-highlighting \
+    "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting"
 fi
 
 # Install Starship
@@ -114,7 +126,6 @@ fi
 
 # Setup wallpaper folder and copy wallpaper
 mkdir -p ~/.wallpapers
-
 if [ -f "./dot_config/wallpaper.jpg" ]; then
   echo "[*] Copying wallpaper.jpg from dot_config..."
   cp ./dot_config/wallpaper.jpg ~/.wallpapers/
@@ -128,15 +139,12 @@ fi
 # Copy all configs from dot_config
 if [ -d "./dot_config" ]; then
   echo "[*] Copying config files from dot_config to home..."
-  # Copy everything except .zshrc and .oh-my-zsh (handled separately for clarity)
   mkdir -p ~/.config
   rsync -av --exclude=".zshrc" --exclude=".oh-my-zsh" ./dot_config/ ~/.config/
-  # Copy .zshrc if present, replacing any existing one
   if [ -f "./dot_config/.zshrc" ]; then
     echo "[*] Replacing ~/.zshrc with your custom version..."
     cp -f ./dot_config/.zshrc ~/.zshrc
   fi
-  # Copy .oh-my-zsh if present
   if [ -d "./dot_config/.oh-my-zsh" ]; then
     echo "[*] Copying Oh My Zsh customizations..."
     mkdir -p ~/.oh-my-zsh
@@ -162,12 +170,4 @@ if [ -f ~/.zshrc ]; then
   fi
 fi
 
-# Source autosuggestions and syntax-highlighting if installed via package manager
-if ! grep -q 'zsh-autosuggestions.zsh' ~/.zshrc; then
-  echo 'source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh' >> ~/.zshrc
-fi
-if ! grep -q 'zsh-syntax-highlighting.zsh' ~/.zshrc; then
-  echo 'source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh' >> ~/.zshrc
-fi
-
-echo "[+] All done!!! You can now reboot into your Hyprland setup, for keybinds, refer to ~/.config/hypr/keys.conf :3"
+echo "[+] All done!!! You can now reboot into your Hyprland setup. For keybinds, refer to ~/.config/hypr/keys.conf :3"
