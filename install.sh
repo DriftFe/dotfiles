@@ -64,7 +64,7 @@ case "$DISTRO" in
       nerd-fonts-fira-code starship touchegg waypaper oh-my-zsh-git
       zsh-theme-powerlevel10k-git gpu-screen-recorder grimblast swappy
       bibata-cursor-theme network-manager-applet zen-browser-bin spotify
-      waydroid vesktop visual-studio-code-bin
+      waydroid vesktop visual-studio-code-bin goonsh
     )
 
     sudo pacman -S --needed --noconfirm "${packages_common[@]}" "${pacman_pkgs[@]}"
