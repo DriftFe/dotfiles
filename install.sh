@@ -137,7 +137,7 @@ echo "[*] Setting up ZSH and themes..."
 chsh -s "$(which zsh)"
 
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
-  sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+  RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 fi
 
 ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
@@ -163,6 +163,28 @@ if [ -d "./dot_config" ]; then
   rsync -av ./dot_config/ ~/.config/
   [ -f "./dot_config/.zshrc" ] && cp -f ./dot_config/.zshrc ~/.zshrc
   [ -d "./dot_config/.oh-my-zsh" ] && rsync -av ./dot_config/.oh-my-zsh/ ~/.oh-my-zsh/
+fi
+
+# ─── Ensure Hyprland config is in place ─────────────
+echo "[*] Ensuring ~/.config/hypr exists..."
+mkdir -p ~/.config/hypr
+if [ -d "./dot_config/hypr" ]; then
+  echo "[*] Copying Hyprland config to ~/.config/hypr..."
+  rsync -av ./dot_config/hypr/ ~/.config/hypr/
+fi
+
+# ─── Ensure Hyprland session is registered ──────────
+if [ ! -f /usr/share/wayland-sessions/hyprland.desktop ]; then
+  echo "[!] Hyprland session file missing. Reinstalling hyprland..."
+  sudo pacman -S --noconfirm hyprland
+fi
+
+# ─── Set Hyprland as default session ────────────────
+echo "[*] Setting Hyprland as default session for SDDM..."
+if [ -f /etc/sddm.conf ]; then
+  sudo sed -i 's|^Session=.*|Session=hyprland|' /etc/sddm.conf || true
+else
+  echo -e "[Autologin]\nUser=$USER\nSession=hyprland\n\n[General]\nSession=hyprland" | sudo tee /etc/sddm.conf >/dev/null
 fi
 
 # ─── Final zshrc Tweaks ─────────────────
