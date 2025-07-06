@@ -1,53 +1,32 @@
 #!/bin/bash
 set -e
 
-# ─── Ensure Zenity Is Installed :3 ──────────────
-if ! command -v zenity &>/dev/null; then
-  echo "[!] Zenity not found. Installing it now..."
-  . /etc/os-release
-  case "$ID" in
-    arch) sudo pacman -S --noconfirm zenity ;;
-    fedora) sudo dnf install -y zenity ;;
-    gentoo) sudo emerge --ask zenity ;;
-    debian|ubuntu) sudo apt install -y zenity ;;
-    *) echo "[!] Can't auto-install zenity on this distro"; exit 1 ;;
-  esac
-fi
+# ─── Welcome ───────────────────────────────
+echo "────────────────────────────────────────────"
+echo "Cute Dotfiles Installer >w<"
+echo "────────────────────────────────────────────"
+echo "Welcome to the multi-distro dotfiles installer!"
+read -p "Press Enter to continue..."
 
-# ─── Welcome ──────────────────
-zenity --info --width=300 --height=100 \
-  --title="Cute Dotfiles Installer >w<" \
-  --text="Welcome to the multi-distro dotfiles installer!\n\nClick OK to continue."
-
-# ─── Detect Distro ───────────────
+# ─── Detect Distro ─────────────────────────
 DISTRO="unknown"
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     DISTRO=$ID
 fi
 
-zenity --info --title="Distro Detected!" \
-  --text="You're running: $DISTRO"
+echo "[*] Detected distro: $DISTRO"
+read -p "Do you want to continue installation on $DISTRO? (y/n) " confirm
+[[ "$confirm" != "y" && "$confirm" != "Y" ]] && echo "Aborted." && exit 0
 
-# ─── Confirm Install ────────────
-zenity --question --width=300 --title="Confirm Install" \
-  --text="Do you want to install dotfiles and Hyprland setup on your $DISTRO system?"
-
-if [ $? -ne 0 ]; then
-  zenity --info --text="Installation cancelled." && exit 0
-fi
-
-# ─── Begin Install with Progress ──────────
-(
-echo "5"; echo "# Preparing..."
+# ─── Begin Install ────────────────────────
+echo "[*] Starting installation..."
 
 # Common packages
 packages_common=(
   zsh git curl wget unzip nano vim fastfetch htop mpv
   noto-fonts noto-fonts-emoji font-manager
 )
-
-echo "10"; echo "# Installing system packages..."
 
 case "$DISTRO" in
   arch)
@@ -96,25 +75,26 @@ case "$DISTRO" in
     ;;
 
   nixos)
-    echo "100"; echo "# NixOS detected. Skipping runtime install..."
-    zenity --info --title="NixOS Detected" \
-      --text="❗ Please edit /etc/nixos/configuration.nix and add the following:\n\n\
-environment.systemPackages = with pkgs; [\n  zsh git curl wget unzip nano vim fastfetch htop mpv kitty waybar hyprland\n\
-nautilus wofi sddm wl-clipboard swaybg gtk3 gtk4 playerctl flatpak\n\
-noto-fonts noto-fonts-emoji jetbrains-mono fira-code roboto font-manager\n];\n\
-\nThen run: sudo nixos-rebuild switch"
+    echo "[!] NixOS detected. Please edit your /etc/nixos/configuration.nix with:"
+    echo
+    echo "  environment.systemPackages = with pkgs; ["
+    echo "    zsh git curl wget unzip nano vim fastfetch htop mpv kitty waybar hyprland"
+    echo "    nautilus wofi sddm wl-clipboard swaybg gtk3 gtk4 playerctl flatpak"
+    echo "    noto-fonts noto-fonts-emoji jetbrains-mono fira-code roboto font-manager"
+    echo "  ];"
+    echo
+    echo "Then run: sudo nixos-rebuild switch"
     exit 0
     ;;
 
   *)
-    zenity --error --text="Unsupported distro: $DISTRO"
+    echo "[!] Unsupported distro: $DISTRO"
     exit 1
     ;;
 esac
 
-echo "50"; echo "# Setting up ZSH and themes..."
-
-# ─── Shell Setup ───────────
+# ─── Shell Setup ───────────────────────────
+echo "[*] Setting up ZSH and themes..."
 chsh -s "$(which zsh)"
 
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
@@ -136,14 +116,14 @@ if ! command -v starship &>/dev/null; then
   curl -sS https://starship.rs/install.sh | sh -s -- -y
 fi
 
-echo "80"; echo "# Copying wallpapers and dotfiles..."
-
-# ─── Wallpaper Setup ────────────
+# ─── Wallpaper Setup ───────────────────────
+echo "[*] Setting up wallpapers..."
 mkdir -p ~/.wallpapers
 [ -f "./dot_config/wallpaper.jpg" ] && cp ./dot_config/wallpaper.jpg ~/.wallpapers/
 [ -f "./dot_config/wallpaper.png" ] && cp ./dot_config/wallpaper.png ~/.wallpapers/
 
-# ─── Dotfiles ────────────
+# ─── Dotfiles ──────────────────────────────
+echo "[*] Copying dotfiles..."
 if [ -d "./dot_config" ]; then
   mkdir -p ~/.config
   rsync -av --exclude=".zshrc" --exclude=".oh-my-zsh" ./dot_config/ ~/.config/
@@ -151,7 +131,7 @@ if [ -d "./dot_config" ]; then
   [ -d "./dot_config/.oh-my-zsh" ] && rsync -av ./dot_config/.oh-my-zsh/ ~/.oh-my-zsh/
 fi
 
-# ─── Final zshrc Tweaks ────────────
+# ─── Final zshrc Tweaks ────────────────────
 sed -i '/\.zsh\/zsh-autosuggestions/d' ~/.zshrc || true
 sed -i '/\.zsh\/zsh-syntax-highlighting/d' ~/.zshrc || true
 
@@ -163,15 +143,8 @@ grep -q '^plugins=' ~/.zshrc && \
   sed -i 's|^plugins=.*|plugins=(git zsh-autosuggestions zsh-syntax-highlighting)|' ~/.zshrc || \
   echo 'plugins=(git zsh-autosuggestions zsh-syntax-highlighting)' >> ~/.zshrc
 
-echo "100"; echo "# Done!"
-) | zenity --progress \
-  --title="Installing Dotfiles..." \
-  --text="Starting install..." \
-  --percentage=0 \
-  --auto-close
-
-# ─── Reboot Prompt ────────
-zenity --question --width=300 --title="Reboot?" \
-  --text="Installation complete!\n\nDo you want to reboot now?"
-
-[ $? -eq 0 ] && reboot
+# ─── Done ──────────────────────────────────
+echo "────────────────────────────────────────────"
+echo "[✓] Installation complete!"
+read -p "Do you want to reboot now? (y/n) " reboot_now
+[ "$reboot_now" = "y" ] || [ "$reboot_now" = "Y" ] && reboot
