@@ -49,24 +49,24 @@ echo "[*] Starting installation..."
 
 packages_common=(
   zsh git curl wget unzip nano vim fastfetch htop mpv
-  noto-fonts noto-fonts-emoji font-manager
+  noto-fonts noto-fonts-emoji font-manager sddm
 )
 
 case "$DISTRO" in
   arch)
     sudo pacman -Syu --noconfirm
     pacman_pkgs=(
-      hyprland waybar kitty nautilus wofi sddm wl-clipboard swaybg
+      hyprland waybar kitty nautilus wofi wl-clipboard swaybg
       gtk3 gtk4 playerctl flatpak hyprpaper hyprlock
       ttf-jetbrains-mono ttf-fira-code ttf-roboto
     )
     aur_pkgs=(
       cava cbonsai wofi-emoji ttf-font-awesome-5 ttf-font-awesome-6
-      nerd-fonts-fira-code starship touchegg waypaper oh-my-zsh-git
+      nerd-fonts-fira-code starship touchegg oh-my-zsh-git
       zsh-theme-powerlevel10k-git gpu-screen-recorder grimblast swappy
-      bibata-cursor-theme network-manager-applet zen-browser-bin spotify
-      waydroid vesktop visual-studio-code-bin goonsh
+      network-manager-applet zen-browser-bin spotify vesktop visual-studio-code-bin goonsh
     )
+
     sudo pacman -S --needed --noconfirm "${packages_common[@]}" "${pacman_pkgs[@]}"
     if ! command -v yay &>/dev/null; then
       echo "[*] Installing yay..."
@@ -74,14 +74,32 @@ case "$DISTRO" in
       git clone https://aur.archlinux.org/yay.git /tmp/yay
       cd /tmp/yay && makepkg -si --noconfirm && cd - && rm -rf /tmp/yay
     fi
-    yay -S --needed --noconfirm "${aur_pkgs[@]}"
+
+    failed_pkgs=()
+    for pkg in "${aur_pkgs[@]}"; do
+      echo "[*] Installing AUR package: $pkg"
+      if ! yay -S --needed --noconfirm "$pkg"; then
+        echo "[!] Failed to install $pkg. Will retry later."
+        failed_pkgs+=("$pkg")
+      fi
+    done
+
+    # Reattempt loop
+    if [ ${#failed_pkgs[@]} -gt 0 ]; then
+      echo "[*] Reattempting failed AUR installs..."
+      for pkg in "${failed_pkgs[@]}"; do
+        echo "[*] Retrying $pkg..."
+        yay -S --needed --noconfirm "$pkg" || echo "[x] $pkg still failed. Skipping."
+      done
+    fi
+
     sudo systemctl enable sddm
     ;;
 
   fedora)
     sudo dnf update -y
     sudo dnf install -y "${packages_common[@]}" kitty waybar wl-clipboard swaybg \
-      nautilus wofi sddm gtk3 gtk4 playerctl flatpak
+      nautilus wofi gtk3 gtk4 playerctl flatpak
     sudo dnf install -y jetbrains-mono-fonts fira-code-fonts google-roboto-fonts fontawesome-fonts
     sudo systemctl enable sddm
     ;;
@@ -101,6 +119,8 @@ case "$DISTRO" in
     nautilus wofi sddm wl-clipboard swaybg gtk3 gtk4 playerctl flatpak
     noto-fonts noto-fonts-emoji jetbrains-mono fira-code roboto font-manager
   ];
+
+services.xserver.displayManager.sddm.enable = true;
 
 Then run: sudo nixos-rebuild switch"
     exit 0
@@ -140,7 +160,7 @@ mkdir -p ~/.wallpapers
 
 if [ -d "./dot_config" ]; then
   mkdir -p ~/.config
-  rsync -av --exclude=".zshrc" --exclude=".oh-my-zsh" ./dot_config/ ~/.config/
+  rsync -av ./dot_config/ ~/.config/
   [ -f "./dot_config/.zshrc" ] && cp -f ./dot_config/.zshrc ~/.zshrc
   [ -d "./dot_config/.oh-my-zsh" ] && rsync -av ./dot_config/.oh-my-zsh/ ~/.oh-my-zsh/
 fi
