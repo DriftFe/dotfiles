@@ -1,28 +1,52 @@
 #!/bin/bash
 set -e
 
-# ─── Welcome ───────────────────────────────
-echo "────────────────────────────────────────────"
-echo "Cute Dotfiles Installer >w<"
-echo "────────────────────────────────────────────"
-echo "Welcome to the multi-distro dotfiles installer!"
-read -p "Press Enter to continue..."
+# ─── Zenity Environment Check ─────────────────────────────
+USE_GUI=false
 
-# ─── Detect Distro ─────────────────────────
+# Check if zenity is available and we're in a GUI session
+if command -v zenity &>/dev/null && { [ "$DISPLAY" ] || [ "$WAYLAND_DISPLAY" ]; }; then
+  USE_GUI=true
+else
+  echo "[*] No GUI detected or Zenity not installed. Falling back to terminal mode."
+fi
+
+# ─── Welcome ─────────────────────────────
+if $USE_GUI; then
+  zenity --info --width=300 --title="Cute Dotfiles Installer >w<" \
+    --text="Welcome to the multi-distro dotfiles installer!"
+else
+  echo "Cute Dotfiles Installer >w<"
+  echo "Welcome to the multi-distro dotfiles installer!"
+  read -p "Press Enter to continue..."
+fi
+
+# ─── Detect Distro ───────────────────────
 DISTRO="unknown"
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     DISTRO=$ID
 fi
 
-echo "[*] Detected distro: $DISTRO"
-read -p "Do you want to continue installation on $DISTRO? (y/n) " confirm
-[[ "$confirm" != "y" && "$confirm" != "Y" ]] && echo "Aborted." && exit 0
+if $USE_GUI; then
+  zenity --info --title="Distro Detected!" --text="You're running: $DISTRO"
+else
+  echo "[*] Detected distro: $DISTRO"
+fi
 
-# ─── Begin Install ────────────────────────
+# ─── Confirm Install ─────────────────────
+if $USE_GUI; then
+  zenity --question --title="Confirm Install" \
+    --text="Install dotfiles and Hyprland setup on $DISTRO?"
+  [ $? -ne 0 ] && zenity --info --text="Installation cancelled." && exit 0
+else
+  read -p "Install dotfiles and Hyprland setup on $DISTRO? (y/n): " confirm
+  [[ "$confirm" != "y" && "$confirm" != "Y" ]] && echo "Cancelled." && exit 0
+fi
+
+# ─── Begin Install ───────────────────────
 echo "[*] Starting installation..."
 
-# Common packages
 packages_common=(
   zsh git curl wget unzip nano vim fastfetch htop mpv
   noto-fonts noto-fonts-emoji font-manager
@@ -31,13 +55,11 @@ packages_common=(
 case "$DISTRO" in
   arch)
     sudo pacman -Syu --noconfirm
-
     pacman_pkgs=(
       hyprland waybar kitty nautilus wofi sddm wl-clipboard swaybg
       gtk3 gtk4 playerctl flatpak hyprpaper hyprlock
       ttf-jetbrains-mono ttf-fira-code ttf-roboto
     )
-
     aur_pkgs=(
       cava cbonsai wofi-emoji ttf-font-awesome-5 ttf-font-awesome-6
       nerd-fonts-fira-code starship touchegg waypaper oh-my-zsh-git
@@ -45,16 +67,13 @@ case "$DISTRO" in
       bibata-cursor-theme network-manager-applet zen-browser-bin spotify
       waydroid vesktop visual-studio-code-bin goonsh
     )
-
     sudo pacman -S --needed --noconfirm "${packages_common[@]}" "${pacman_pkgs[@]}"
-
     if ! command -v yay &>/dev/null; then
       echo "[*] Installing yay..."
       sudo pacman -S --needed --noconfirm base-devel
       git clone https://aur.archlinux.org/yay.git /tmp/yay
       cd /tmp/yay && makepkg -si --noconfirm && cd - && rm -rf /tmp/yay
     fi
-
     yay -S --needed --noconfirm "${aur_pkgs[@]}"
     sudo systemctl enable sddm
     ;;
@@ -75,15 +94,15 @@ case "$DISTRO" in
     ;;
 
   nixos)
-    echo "[!] NixOS detected. Please edit your /etc/nixos/configuration.nix with:"
-    echo
-    echo "  environment.systemPackages = with pkgs; ["
-    echo "    zsh git curl wget unzip nano vim fastfetch htop mpv kitty waybar hyprland"
-    echo "    nautilus wofi sddm wl-clipboard swaybg gtk3 gtk4 playerctl flatpak"
-    echo "    noto-fonts noto-fonts-emoji jetbrains-mono fira-code roboto font-manager"
-    echo "  ];"
-    echo
-    echo "Then run: sudo nixos-rebuild switch"
+    echo "[!] NixOS detected. Please update /etc/nixos/configuration.nix with:
+
+  environment.systemPackages = with pkgs; [
+    zsh git curl wget unzip nano vim fastfetch htop mpv kitty waybar hyprland
+    nautilus wofi sddm wl-clipboard swaybg gtk3 gtk4 playerctl flatpak
+    noto-fonts noto-fonts-emoji jetbrains-mono fira-code roboto font-manager
+  ];
+
+Then run: sudo nixos-rebuild switch"
     exit 0
     ;;
 
@@ -93,7 +112,7 @@ case "$DISTRO" in
     ;;
 esac
 
-# ─── Shell Setup ───────────────────────────
+# ─── Shell Setup ─────────────────────────
 echo "[*] Setting up ZSH and themes..."
 chsh -s "$(which zsh)"
 
@@ -102,28 +121,23 @@ if [ ! -d "$HOME/.oh-my-zsh" ]; then
 fi
 
 ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
-
-[ ! -d "$ZSH_CUSTOM/themes/powerlevel10k" ] &&
+[ ! -d "$ZSH_CUSTOM/themes/powerlevel10k" ] && \
   git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_CUSTOM/themes/powerlevel10k"
-
-[ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ] &&
+[ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ] && \
   git clone https://github.com/zsh-users/zsh-autosuggestions "$ZSH_CUSTOM/plugins/zsh-autosuggestions"
-
-[ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ] &&
+[ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ] && \
   git clone https://github.com/zsh-users/zsh-syntax-highlighting "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting"
 
 if ! command -v starship &>/dev/null; then
   curl -sS https://starship.rs/install.sh | sh -s -- -y
 fi
 
-# ─── Wallpaper Setup ───────────────────────
-echo "[*] Setting up wallpapers..."
+# ─── Wallpapers & Dotfiles ───────────────
+echo "[*] Copying dotfiles and wallpapers..."
 mkdir -p ~/.wallpapers
 [ -f "./dot_config/wallpaper.jpg" ] && cp ./dot_config/wallpaper.jpg ~/.wallpapers/
 [ -f "./dot_config/wallpaper.png" ] && cp ./dot_config/wallpaper.png ~/.wallpapers/
 
-# ─── Dotfiles ──────────────────────────────
-echo "[*] Copying dotfiles..."
 if [ -d "./dot_config" ]; then
   mkdir -p ~/.config
   rsync -av --exclude=".zshrc" --exclude=".oh-my-zsh" ./dot_config/ ~/.config/
@@ -131,7 +145,7 @@ if [ -d "./dot_config" ]; then
   [ -d "./dot_config/.oh-my-zsh" ] && rsync -av ./dot_config/.oh-my-zsh/ ~/.oh-my-zsh/
 fi
 
-# ─── Final zshrc Tweaks ────────────────────
+# ─── Final zshrc Tweaks ─────────────────
 sed -i '/\.zsh\/zsh-autosuggestions/d' ~/.zshrc || true
 sed -i '/\.zsh\/zsh-syntax-highlighting/d' ~/.zshrc || true
 
@@ -143,8 +157,13 @@ grep -q '^plugins=' ~/.zshrc && \
   sed -i 's|^plugins=.*|plugins=(git zsh-autosuggestions zsh-syntax-highlighting)|' ~/.zshrc || \
   echo 'plugins=(git zsh-autosuggestions zsh-syntax-highlighting)' >> ~/.zshrc
 
-# ─── Done ──────────────────────────────────
-echo "────────────────────────────────────────────"
+# ─── Finish ──────────────────────────────
 echo "[✓] Installation complete!"
-read -p "Do you want to reboot now? (y/n) " reboot_now
-[ "$reboot_now" = "y" ] || [ "$reboot_now" = "Y" ] && reboot
+if $USE_GUI; then
+  zenity --question --title="Reboot?" \
+    --text="Installation complete!\n\nDo you want to reboot now?"
+  [ $? -eq 0 ] && reboot
+else
+  read -p "Reboot now? (y/n): " reboot_now
+  [[ "$reboot_now" =~ ^[Yy]$ ]] && reboot
+fi
