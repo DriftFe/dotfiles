@@ -54,11 +54,27 @@ case "$DISTRO" in
   arch)
     sudo pacman -Syu --noconfirm
     sudo pacman -S --needed --noconfirm \
-      hyprland waybar kitty zsh nautilus wofi sddm fastfetch mpv htop wl-clipboard \
-      swaybg unzip curl wget git gtk3 gtk4 playerctl nano vim flatpak hyprpaper \
-      hyprlock noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-jetbrains-mono \
-      ttf-fira-code ttf-roboto font-manager
+      hyprland waybar kitty nautilus wofi sddm wl-clipboard swaybg \
+      gtk3 gtk4 playerctl flatpak hyprpaper hyprlock \
+      ttf-jetbrains-mono ttf-fira-code ttf-roboto \
+      zsh git curl wget unzip nano vim fastfetch htop mpv \
+      noto-fonts noto-fonts-cjk noto-fonts-emoji font-manager
+
+    if ! command -v yay &>/dev/null; then
+      echo "[*] Installing yay..."
+      sudo pacman -S --needed --noconfirm base-devel
+      git clone https://aur.archlinux.org/yay.git /tmp/yay
+      cd /tmp/yay && makepkg -si --noconfirm && cd - && rm -rf /tmp/yay
+    fi
+
+    yay -S --needed --noconfirm \
+      cava cbonsai wofi-emoji ttf-font-awesome-5 ttf-font-awesome-6 \
+      nerd-fonts-fira-code starship touchegg waypaper oh-my-zsh-git \
+      zsh-theme-powerlevel10k-git gpu-screen-recorder grimblast swappy \
+      bibata-cursor-theme network-manager-applet zen-browser-bin spotify \
+      waydroid vesktop visual-studio-code-bin goonsh
     ;;
+
   fedora)
     sudo dnf update -y
     sudo dnf install -y \
@@ -67,6 +83,7 @@ case "$DISTRO" in
       hyprlock google-noto-sans-fonts google-noto-emoji-fonts \
       jetbrains-mono-fonts fira-code-fonts google-roboto-fonts font-manager
     ;;
+
   gentoo)
     sudo emerge --sync
     sudo emerge --ask \
@@ -77,11 +94,13 @@ case "$DISTRO" in
       gui-apps/hyprpaper gui-apps/hyprlock gui-apps/swaybg \
       media-fonts/noto media-fonts/jetbrains-mono media-fonts/roboto font-manager
     ;;
+
   nixos)
     echo "[!] NixOS detected. Please add the following to your /etc/nixos/configuration.nix and run 'sudo nixos-rebuild switch':"
     echo 'environment.systemPackages = with pkgs; [ zsh git curl wget unzip nano vim fastfetch htop mpv kitty waybar hyprland nautilus wofi sddm wl-clipboard swaybg gtk3 gtk4 playerctl flatpak noto-fonts noto-fonts-cjk noto-fonts-emoji jetbrains-mono fira-code roboto font-manager ];'
     exit 0
     ;;
+
   *)
     echo "[!] Unsupported distro: $DISTRO"
     exit 1
