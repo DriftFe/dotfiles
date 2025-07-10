@@ -12,6 +12,33 @@ else
   echo "[*] No GUI detected or Zenity not installed. Falling back to terminal mode."
 fi
 
+# ─── Normalize DISTRO ─────────────────────────────
+if [ -f /etc/os-release ]; then
+  . /etc/os-release
+  case "$ID" in
+    arch|manjaro|endeavouros)
+      DISTRO="arch"
+      ;;
+    fedora|rhel|centos)
+      DISTRO="fedora"
+      ;;
+    gentoo)
+      DISTRO="gentoo"
+      ;;
+    debian|ubuntu|pop|linuxmint)
+      DISTRO="debian"
+      ;;
+    nixos)
+      DISTRO="nixos"
+      ;;
+    *)
+      DISTRO="$ID"
+      ;;
+  esac
+else
+  DISTRO="unknown"
+fi
+
 # ─── Confirm Uninstall ─────────────────────
 if $USE_GUI; then
   zenity --question --title="Uninstall Dotfiles" \
@@ -41,7 +68,15 @@ if command -v yay &>/dev/null; then
 fi
 
 # ─── Remove from official repos ────────
-sudo pacman -Rns --noconfirm kitty nautilus wofi sddm waybar hyprpaper hyprlock || true
+if [ "$DISTRO" = "arch" ]; then
+  sudo pacman -Rns --noconfirm kitty nautilus wofi sddm waybar hyprpaper hyprlock || true
+elif [ "$DISTRO" = "fedora" ]; then
+  sudo dnf remove -y kitty nautilus wofi sddm waybar || true
+elif [ "$DISTRO" = "gentoo" ]; then
+  sudo emerge --ask --depclean x11-terms/kitty gui-apps/wofi gui-apps/sddm x11-misc/waybar || true
+elif [ "$DISTRO" = "debian" ]; then
+  sudo apt remove -y kitty nautilus wofi sddm waybar || true
+fi
 
 # ─── Offer to Restore from GitHub ─────────────
 if $USE_GUI; then
