@@ -12,44 +12,41 @@ else
   echo "[*] No GUI detected or Zenity not installed. Falling back to terminal mode."
 fi
 
-# ─── Confirm Uninstall ─────────────────────
+# ─── Confirm Update ─────────────────────
 if $USE_GUI; then
-  zenity --question --title="Uninstall Dotfiles" \
-    --text="This will remove all configs and dotfiles except Hyprland itself. Continue?"
-  [ $? -ne 0 ] && zenity --info --text="Uninstallation cancelled." && exit 0
+  zenity --question --title="Update Dotfiles" \
+    --text="Check for dotfile updates from GitHub and apply if changed?"
+  [ $? -ne 0 ] && zenity --info --text="Update cancelled." && exit 0
 else
-  echo "[*] This will remove all dotfiles, configs, and installed components except Hyprland."
-  read -p "Are you sure? (y/n): " confirm
+  echo "[*] Check for dotfile updates from GitHub."
+  read -p "Proceed? (y/n): " confirm
   [[ "$confirm" != "y" && "$confirm" != "Y" ]] && echo "Cancelled." && exit 0
 fi
 
-# ─── Stop and disable SDDM ─────────────
-echo "[*] Disabling SDDM..."
-sudo systemctl disable sddm || true
+TMP_DIR=$(mktemp -d)
+git clone --depth=1 "$REPO_URL" "$TMP_DIR"
 
-# ─── Remove Dotfiles ───────────────────
-echo "[*] Removing dotfiles and configs..."
-rm -rf ~/.config/{waybar,kitty,wofi,sddm,vesktop,hypr,hyprpaper,cava,zsh,fastfetch} \
-       ~/.wallpapers ~/.oh-my-zsh ~/.zshrc ~/.config/starship.toml
+changes=$(diff -qr "$TMP_DIR/dot_config" "$HOME/.config" | grep -v ".git")
 
-# ─── Remove AUR/optional packages ──────
-echo "[*] Removing optional packages..."
-if command -v yay &>/dev/null; then
-  yay -Rns --noconfirm cava cbonsai wofi-emoji starship touchegg \
-    oh-my-zsh-git zsh-theme-powerlevel10k-git grimblast swappy \
-    gpu-screen-recorder vesktop visual-studio-code-bin spotify zen-browser-bin goonsh || true
+if [ -z "$changes" ]; then
+  $USE_GUI && zenity --info --title="Dotfiles Updater" --text="✅ Dotfiles are up to date." || echo "[✓] Dotfiles are up to date."
+else
+  $USE_GUI && zenity --question --title="Dotfiles Updater" --text="⚠️ Changes detected. Update local config?"
+  if ! $USE_GUI || [ $? -eq 0 ]; then
+    rsync -av --delete "$TMP_DIR/dot_config/" "$HOME/.config/"
+    [ -f "$TMP_DIR/dot_config/.zshrc" ] && cp -f "$TMP_DIR/dot_config/.zshrc" ~/.zshrc
+    [ -d "$TMP_DIR/dot_config/.oh-my-zsh" ] && rsync -av "$TMP_DIR/dot_config/.oh-my-zsh/" ~/.oh-my-zsh/
+    $USE_GUI && zenity --info --title="Dotfiles Updater" --text="✅ Dotfiles updated." || echo "[✓] Dotfiles updated."
+  else
+    $USE_GUI && zenity --info --title="Dotfiles Updater" --text="Update cancelled." || echo "[x] Update cancelled."
+  fi
 fi
 
-# ─── Remove from official repos ────────
-sudo pacman -Rns --noconfirm kitty nautilus wofi sddm waybar hyprpaper hyprlock || true
+rm -rf "$TMP_DIR"
 
-# ─── Cleanup Complete ─────────────────
-if $USE_GUI; then
-  zenity --question --title="Uninstall Complete" \
-    --text="Uninstallation complete. Reboot now?"
-  [ $? -eq 0 ] && reboot
+# ─── Optional: Re-source ZSH ─────────────
+if [ "$SHELL" = "$(which zsh)" ]; then
+  exec zsh
 else
-  echo "[✓] Uninstallation complete."
-  read -p "Reboot now? (y/n): " reboot
-  [[ "$reboot" =~ ^[Yy]$ ]] && reboot
+  $USE_GUI && zenity --info --title="Shell Reminder" --text="Restart your terminal session to reload configuration." || echo "[*] Restart your shell or log out and log back in."
 fi
