@@ -25,9 +25,6 @@ if [ -f /etc/os-release ]; then
     gentoo)
       DISTRO="gentoo"
       ;;
-    debian|ubuntu|pop|linuxmint)
-      DISTRO="debian"
-      ;;
     nixos)
       DISTRO="nixos"
       ;;
@@ -79,14 +76,6 @@ case "$DISTRO" in
       gui-apps/waybar gui-apps/sddm gui-libs/gtk gui-libs/gtk4 \
       gui-apps/hyprpaper gui-apps/hyprlock gui-apps/swaybg \
       media-fonts/noto media-fonts/jetbrains-mono media-fonts/roboto font-manager
-    ;;
-  debian)
-    sudo apt update && sudo apt upgrade -y
-    sudo apt install -y \
-      hyprland waybar kitty zsh nautilus wofi sddm fastfetch mpv htop wl-clipboard \
-      swaybg unzip curl wget git gtk3 gtk4 playerctl nano vim flatpak \
-      fonts-noto fonts-noto-cjk fonts-noto-color-emoji fonts-jetbrains-mono \
-      fonts-firacode fonts-roboto font-manager
     ;;
   nixos)
     echo "[!] NixOS detected. Please add the following to your /etc/nixos/configuration.nix and run 'sudo nixos-rebuild switch':"
