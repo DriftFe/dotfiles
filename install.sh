@@ -1,193 +1,123 @@
 #!/bin/bash
 set -e
 
+REPO_URL="https://github.com/DriftFe/dotfiles"
+
 # ─── Zenity Environment Check ─────────────────────────────
 USE_GUI=false
 
-# Check if zenity is available and we're in a GUI session
 if command -v zenity &>/dev/null && { [ "$DISPLAY" ] || [ "$WAYLAND_DISPLAY" ]; }; then
   USE_GUI=true
 else
   echo "[*] No GUI detected or Zenity not installed. Falling back to terminal mode."
 fi
 
-# ─── Welcome ─────────────────────────────
-if $USE_GUI; then
-  zenity --info --width=300 --title="Cute Dotfiles Installer >w<" \
-    --text="Welcome to the multi-distro dotfiles installer!"
-else
-  echo "Cute Dotfiles Installer >w<"
-  echo "Welcome to the multi-distro dotfiles installer!"
-  read -p "Press Enter to continue..."
-fi
-
-# ─── Detect Distro ───────────────────────
-DISTRO="unknown"
+# ─── Normalize DISTRO ─────────────────────────────
 if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    DISTRO=$ID
-fi
-
-if $USE_GUI; then
-  zenity --info --title="Distro Detected!" --text="You're running: $DISTRO"
+  . /etc/os-release
+  case "$ID" in
+    arch|manjaro|endeavouros)
+      DISTRO="arch"
+      ;;
+    fedora|rhel|centos)
+      DISTRO="fedora"
+      ;;
+    gentoo)
+      DISTRO="gentoo"
+      ;;
+    debian|ubuntu|pop|linuxmint)
+      DISTRO="debian"
+      ;;
+    nixos)
+      DISTRO="nixos"
+      ;;
+    *)
+      DISTRO="$ID"
+      ;;
+  esac
 else
-  echo "[*] Detected distro: $DISTRO"
+  DISTRO="unknown"
 fi
 
 # ─── Confirm Install ─────────────────────
 if $USE_GUI; then
-  zenity --question --title="Confirm Install" \
-    --text="Install dotfiles and Hyprland setup on $DISTRO?"
+  zenity --question --title="Install Dotfiles" \
+    --text="This will install all configs and packages for $DISTRO. Continue?"
   [ $? -ne 0 ] && zenity --info --text="Installation cancelled." && exit 0
 else
-  read -p "Install dotfiles and Hyprland setup on $DISTRO? (y/n): " confirm
+  echo "[*] This will install dotfiles and packages for $DISTRO."
+  read -p "Continue? (y/n): " confirm
   [[ "$confirm" != "y" && "$confirm" != "Y" ]] && echo "Cancelled." && exit 0
 fi
 
-# ─── Begin Install ───────────────────────
-echo "[*] Starting installation..."
-
-packages_common=(
-  zsh git curl wget unzip nano vim fastfetch htop mpv
-  noto-fonts noto-fonts-emoji font-manager sddm
-)
+# ─── Package Installation ─────────────────────────────
+echo "[*] Installing base packages..."
 
 case "$DISTRO" in
   arch)
     sudo pacman -Syu --noconfirm
-    pacman_pkgs=(
-      hyprland waybar kitty nautilus wofi wl-clipboard swaybg
-      gtk3 gtk4 playerctl flatpak hyprpaper hyprlock
-      ttf-jetbrains-mono ttf-fira-code ttf-roboto
-    )
-    aur_pkgs=(
-      cava cbonsai wofi-emoji ttf-font-awesome-5 ttf-font-awesome-6
-      nerd-fonts-fira-code starship touchegg oh-my-zsh-git
-      zsh-theme-powerlevel10k-git gpu-screen-recorder grimblast swappy
-      network-manager-applet zen-browser-bin spotify vesktop visual-studio-code-bin goonsh
-    )
-
-    sudo pacman -S --needed --noconfirm "${packages_common[@]}" "${pacman_pkgs[@]}"
-    if ! command -v yay &>/dev/null; then
-      echo "[*] Installing yay..."
-      sudo pacman -S --needed --noconfirm base-devel
-      git clone https://aur.archlinux.org/yay.git /tmp/yay
-      cd /tmp/yay && makepkg -si --noconfirm && cd - && rm -rf /tmp/yay
-    fi
-
-    failed_pkgs=()
-    for pkg in "${aur_pkgs[@]}"; do
-      echo "[*] Installing AUR package: $pkg"
-      if ! yay -S --needed --noconfirm "$pkg"; then
-        echo "[!] Failed to install $pkg. Will retry later."
-        failed_pkgs+=("$pkg")
-      fi
-    done
-
-    # Reattempt loop
-    if [ ${#failed_pkgs[@]} -gt 0 ]; then
-      echo "[*] Reattempting failed AUR installs..."
-      for pkg in "${failed_pkgs[@]}"; do
-        echo "[*] Retrying $pkg..."
-        yay -S --needed --noconfirm "$pkg" || echo "[x] $pkg still failed. Skipping."
-      done
-    fi
-
-    sudo systemctl enable sddm
+    sudo pacman -S --needed --noconfirm \
+      hyprland waybar kitty zsh nautilus wofi sddm fastfetch mpv htop wl-clipboard \
+      swaybg unzip curl wget git gtk3 gtk4 playerctl nano vim flatpak hyprpaper \
+      hyprlock noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-jetbrains-mono \
+      ttf-fira-code ttf-roboto font-manager
     ;;
-
   fedora)
     sudo dnf update -y
-    sudo dnf install -y "${packages_common[@]}" kitty waybar wl-clipboard swaybg \
-      nautilus wofi gtk3 gtk4 playerctl flatpak
-    sudo dnf install -y jetbrains-mono-fonts fira-code-fonts google-roboto-fonts fontawesome-fonts
-    sudo systemctl enable sddm
+    sudo dnf install -y \
+      hyprland waybar kitty zsh nautilus wofi sddm fastfetch mpv htop wl-clipboard \
+      swaybg unzip curl wget git gtk3 gtk4 playerctl nano vim flatpak hyprpaper \
+      hyprlock google-noto-sans-fonts google-noto-emoji-fonts \
+      jetbrains-mono-fonts fira-code-fonts google-roboto-fonts font-manager
     ;;
-
   gentoo)
     sudo emerge --sync
-    sudo emerge --ask "${packages_common[@]}" x11-terms/kitty x11-misc/waybar \
-      gui-apps/wofi gui-apps/swaybg x11-misc/wl-clipboard gui-apps/hyprland
-    sudo emerge --ask media-fonts/noto media-fonts/roboto media-fonts/jetbrains-mono
+    sudo emerge --ask \
+      app-shells/zsh app-admin/rsync app-editors/vim app-editors/nano \
+      app-text/wget net-misc/curl app-misc/flatpak media-video/mpv \
+      app-admin/fastfetch app-admin/htop x11-terms/kitty gui-apps/wofi \
+      gui-apps/waybar gui-apps/sddm gui-libs/gtk gui-libs/gtk4 \
+      gui-apps/hyprpaper gui-apps/hyprlock gui-apps/swaybg \
+      media-fonts/noto media-fonts/jetbrains-mono media-fonts/roboto font-manager
     ;;
-
+  debian)
+    sudo apt update && sudo apt upgrade -y
+    sudo apt install -y \
+      hyprland waybar kitty zsh nautilus wofi sddm fastfetch mpv htop wl-clipboard \
+      swaybg unzip curl wget git gtk3 gtk4 playerctl nano vim flatpak \
+      fonts-noto fonts-noto-cjk fonts-noto-color-emoji fonts-jetbrains-mono \
+      fonts-firacode fonts-roboto font-manager
+    ;;
   nixos)
-    echo "[!] NixOS detected. Please update /etc/nixos/configuration.nix with:
-
-  environment.systemPackages = with pkgs; [
-    zsh git curl wget unzip nano vim fastfetch htop mpv kitty waybar hyprland
-    nautilus wofi sddm wl-clipboard swaybg gtk3 gtk4 playerctl flatpak
-    noto-fonts noto-fonts-emoji jetbrains-mono fira-code roboto font-manager
-  ];
-
-services.xserver.displayManager.sddm.enable = true;
-
-Then run: sudo nixos-rebuild switch"
+    echo "[!] NixOS detected. Please add the following to your /etc/nixos/configuration.nix and run 'sudo nixos-rebuild switch':"
+    echo 'environment.systemPackages = with pkgs; [ zsh git curl wget unzip nano vim fastfetch htop mpv kitty waybar hyprland nautilus wofi sddm wl-clipboard swaybg gtk3 gtk4 playerctl flatpak noto-fonts noto-fonts-cjk noto-fonts-emoji jetbrains-mono fira-code roboto font-manager ];'
     exit 0
     ;;
-
   *)
     echo "[!] Unsupported distro: $DISTRO"
     exit 1
     ;;
 esac
 
-# ─── Shell Setup ─────────────────────────
-echo "[*] Setting up ZSH and themes..."
-chsh -s "$(which zsh)"
+# ─── Clone Repo If Needed ─────────────
+TMP_DIR=$(mktemp -d)
+echo "[*] Cloning dotfiles from $REPO_URL..."
+git clone --depth=1 "$REPO_URL" "$TMP_DIR"
 
-if [ ! -d "$HOME/.oh-my-zsh" ]; then
-  RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+# ─── Apply Dotfiles ─────────────────────
+echo "[*] Copying configs..."
+mkdir -p ~/.config
+rsync -av --exclude=".zshrc" --exclude=".oh-my-zsh" "$TMP_DIR/dot_config/" ~/.config/
+[ -f "$TMP_DIR/dot_config/.zshrc" ] && cp -f "$TMP_DIR/dot_config/.zshrc" ~/.zshrc
+[ -d "$TMP_DIR/dot_config/.oh-my-zsh" ] && rsync -av "$TMP_DIR/dot_config/.oh-my-zsh/" ~/.oh-my-zsh/
+
+# ─── Enable SDDM ─────────────
+if command -v systemctl &>/dev/null; then
+  echo "[*] Enabling SDDM..."
+  sudo systemctl enable sddm || true
 fi
 
-ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
-[ ! -d "$ZSH_CUSTOM/themes/powerlevel10k" ] && \
-  git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_CUSTOM/themes/powerlevel10k"
-[ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ] && \
-  git clone https://github.com/zsh-users/zsh-autosuggestions "$ZSH_CUSTOM/plugins/zsh-autosuggestions"
-[ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ] && \
-  git clone https://github.com/zsh-users/zsh-syntax-highlighting "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting"
-
-if ! command -v starship &>/dev/null; then
-  curl -sS https://starship.rs/install.sh | sh -s -- -y
-fi
-
-# ─── Wallpapers & Dotfiles ───────────────
-echo "[*] Copying dotfiles and wallpapers..."
-mkdir -p ~/.wallpapers
-[ -f "./dot_config/wallpaper.jpg" ] && cp ./dot_config/wallpaper.jpg ~/.wallpapers/
-[ -f "./dot_config/wallpaper.png" ] && cp ./dot_config/wallpaper.png ~/.wallpapers/
-
-if [ -d "./dot_config" ]; then
-  mkdir -p ~/.config
-  rsync -av ./dot_config/ ~/.config/
-  [ -f "./dot_config/.zshrc" ] && cp -f ./dot_config/.zshrc ~/.zshrc
-  [ -d "./dot_config/.oh-my-zsh" ] && rsync -av ./dot_config/.oh-my-zsh/ ~/.oh-my-zsh/
-fi
-
-# ─── Ensure Hyprland config is in place ─────────────
-echo "[*] Ensuring ~/.config/hypr exists..."
-mkdir -p ~/.config/hypr
-if [ -d "./dot_config/hypr" ]; then
-  echo "[*] Copying Hyprland config to ~/.config/hypr..."
-  rsync -av ./dot_config/hypr/ ~/.config/hypr/
-fi
-
-# ─── Ensure Hyprland session is registered ──────────
-if [ ! -f /usr/share/wayland-sessions/hyprland.desktop ]; then
-  echo "[!] Hyprland session file missing. Reinstalling hyprland..."
-  sudo pacman -S --noconfirm hyprland
-fi
-
-# ─── Set Hyprland as default session ────────────────
-echo "[*] Setting Hyprland as default session for SDDM..."
-if [ -f /etc/sddm.conf ]; then
-  sudo sed -i 's|^Session=.*|Session=hyprland|' /etc/sddm.conf || true
-else
-  echo -e "[Autologin]\nUser=$USER\nSession=hyprland\n\n[General]\nSession=hyprland" | sudo tee /etc/sddm.conf >/dev/null
-fi
-
-# ─── Final zshrc Tweaks ─────────────────
+# ─── Final zshrc Tweaks ────────────
 sed -i '/\.zsh\/zsh-autosuggestions/d' ~/.zshrc || true
 sed -i '/\.zsh\/zsh-syntax-highlighting/d' ~/.zshrc || true
 
@@ -199,13 +129,16 @@ grep -q '^plugins=' ~/.zshrc && \
   sed -i 's|^plugins=.*|plugins=(git zsh-autosuggestions zsh-syntax-highlighting)|' ~/.zshrc || \
   echo 'plugins=(git zsh-autosuggestions zsh-syntax-highlighting)' >> ~/.zshrc
 
-# ─── Finish ──────────────────────────────
-echo "[✓] Installation complete!"
+# ─── Finish ─────────────
+rm -rf "$TMP_DIR"
+
 if $USE_GUI; then
-  zenity --question --title="Reboot?" \
-    --text="Installation complete!\n\nDo you want to reboot now?"
+  zenity --info --title="Installation Complete" \
+    --text="All done! You may want to reboot now."
+  zenity --question --text="Reboot now?"
   [ $? -eq 0 ] && reboot
 else
-  read -p "Reboot now? (y/n): " reboot_now
-  [[ "$reboot_now" =~ ^[Yy]$ ]] && reboot
+  echo "[✓] Installation complete."
+  read -p "Reboot now? (y/n): " reboot
+  [[ "$reboot" =~ ^[Yy]$ ]] && reboot
 fi
