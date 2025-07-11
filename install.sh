@@ -15,23 +15,28 @@ fi
 # ─── Normalize DISTRO ─────────────────────────────
 if [ -f /etc/os-release ]; then
   . /etc/os-release
-  case "$ID" in
-    arch|manjaro|endeavouros)
-      DISTRO="arch"
-      ;;
-    fedora|rhel|centos)
-      DISTRO="fedora"
-      ;;
-    gentoo)
-      DISTRO="gentoo"
-      ;;
-    nixos)
-      DISTRO="nixos"
-      ;;
-    *)
-      DISTRO="$ID"
-      ;;
-  esac
+  if [[ "$ID_LIKE" =~ arch ]]; then
+    DISTRO="arch"
+  elif [[ "$ID_LIKE" =~ fedora|rhel|centos ]]; then
+    DISTRO="fedora"
+  elif [[ "$ID_LIKE" =~ gentoo ]]; then
+    DISTRO="gentoo"
+  elif [[ "$ID_LIKE" =~ nixos ]]; then
+    DISTRO="nixos"
+  else
+    case "$ID" in
+      arch|manjaro|endeavouros|arco|garuda)
+        DISTRO="arch";;
+      fedora|rhel|centos|rocky|almalinux)
+        DISTRO="fedora";;
+      gentoo)
+        DISTRO="gentoo";;
+      nixos)
+        DISTRO="nixos";;
+      *)
+        DISTRO="unknown";;
+    esac
+  fi
 else
   DISTRO="unknown"
 fi
@@ -53,12 +58,22 @@ echo "[*] Installing base packages..."
 case "$DISTRO" in
   arch)
     sudo pacman -Syu --noconfirm
-    sudo pacman -S --needed --noconfirm \
-      hyprland waybar kitty nautilus wofi sddm wl-clipboard swaybg \
-      gtk3 gtk4 playerctl flatpak hyprpaper hyprlock \
-      ttf-jetbrains-mono ttf-fira-code ttf-roboto \
-      zsh git curl wget unzip nano vim fastfetch htop mpv \
-      noto-fonts noto-fonts-cjk noto-fonts-emoji font-manager
+
+    pacman_pkgs=(
+      hyprland waybar kitty nautilus wofi sddm wl-clipboard swaybg
+      gtk3 gtk4 playerctl flatpak hyprpaper hyprlock
+      ttf-jetbrains-mono ttf-fira-code ttf-roboto
+    )
+
+    aur_pkgs=(
+      cava cbonsai wofi-emoji ttf-font-awesome-5 ttf-font-awesome-6
+      nerd-fonts-fira-code starship touchegg waypaper oh-my-zsh-git
+      zsh-theme-powerlevel10k-git gpu-screen-recorder grimblast swappy
+      bibata-cursor-theme network-manager-applet zen-browser-bin spotify
+      waydroid vesktop visual-studio-code-bin goonsh
+    )
+
+    sudo pacman -S --needed --noconfirm "${pacman_pkgs[@]}"
 
     if ! command -v yay &>/dev/null; then
       echo "[*] Installing yay..."
@@ -67,42 +82,32 @@ case "$DISTRO" in
       cd /tmp/yay && makepkg -si --noconfirm && cd - && rm -rf /tmp/yay
     fi
 
-    yay -S --needed --noconfirm \
-      cava cbonsai wofi-emoji ttf-font-awesome-5 ttf-font-awesome-6 \
-      nerd-fonts-fira-code starship touchegg waypaper oh-my-zsh-git \
-      zsh-theme-powerlevel10k-git gpu-screen-recorder grimblast swappy \
-      bibata-cursor-theme network-manager-applet zen-browser-bin spotify \
-      waydroid vesktop visual-studio-code-bin goonsh
+    yay -S --needed --noconfirm "${aur_pkgs[@]}"
+    sudo systemctl enable sddm
     ;;
 
   fedora)
     sudo dnf update -y
-    sudo dnf install -y \
-      hyprland waybar kitty zsh nautilus wofi sddm fastfetch mpv htop wl-clipboard \
-      swaybg unzip curl wget git gtk3 gtk4 playerctl nano vim flatpak hyprpaper \
-      hyprlock google-noto-sans-fonts google-noto-emoji-fonts \
-      jetbrains-mono-fonts fira-code-fonts google-roboto-fonts font-manager
+    sudo dnf install -y zsh git curl wget unzip nano vim fastfetch htop mpv kitty waybar wl-clipboard swaybg \
+      nautilus wofi sddm gtk3 gtk4 playerctl flatpak jetbrains-mono-fonts fira-code-fonts google-roboto-fonts fontawesome-fonts
+    sudo systemctl enable sddm
     ;;
 
   gentoo)
     sudo emerge --sync
-    sudo emerge --ask \
-      app-shells/zsh app-admin/rsync app-editors/vim app-editors/nano \
-      app-text/wget net-misc/curl app-misc/flatpak media-video/mpv \
-      app-admin/fastfetch app-admin/htop x11-terms/kitty gui-apps/wofi \
-      gui-apps/waybar gui-apps/sddm gui-libs/gtk gui-libs/gtk4 \
-      gui-apps/hyprpaper gui-apps/hyprlock gui-apps/swaybg \
-      media-fonts/noto media-fonts/jetbrains-mono media-fonts/roboto font-manager
+    sudo emerge --ask zsh git curl wget unzip nano vim fastfetch htop mpv x11-terms/kitty x11-misc/waybar \
+      gui-apps/wofi gui-apps/swaybg x11-misc/wl-clipboard gui-apps/hyprland media-fonts/noto media-fonts/roboto media-fonts/jetbrains-mono
     ;;
 
   nixos)
-    echo "[!] NixOS detected. Please add the following to your /etc/nixos/configuration.nix and run 'sudo nixos-rebuild switch':"
-    echo 'environment.systemPackages = with pkgs; [ zsh git curl wget unzip nano vim fastfetch htop mpv kitty waybar hyprland nautilus wofi sddm wl-clipboard swaybg gtk3 gtk4 playerctl flatpak noto-fonts noto-fonts-cjk noto-fonts-emoji jetbrains-mono fira-code roboto font-manager ];'
+    echo "[!] NixOS detected. Please update your configuration.nix manually."
+    $USE_GUI && zenity --info --title="NixOS Detected" --text="Update /etc/nixos/configuration.nix to include your packages."
     exit 0
     ;;
 
   *)
     echo "[!] Unsupported distro: $DISTRO"
+    $USE_GUI && zenity --error --text="Unsupported distro: $DISTRO"
     exit 1
     ;;
 esac
