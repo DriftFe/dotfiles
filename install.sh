@@ -61,7 +61,7 @@ case "$DISTRO" in
 
     pacman_pkgs=(
       hyprland waybar kitty nautilus wofi sddm wl-clipboard swaybg
-      gtk3 gtk4 playerctl flatpak hyprpaper hyprlock
+      gtk3 gtk4 playerctl flatpak hyprpaper hyprlock pavucontrol
       ttf-jetbrains-mono ttf-fira-code ttf-roboto
     )
 
