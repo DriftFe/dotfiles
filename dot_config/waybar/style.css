@@ -122,3 +122,15 @@ window#waybar {
   margin: 8px 6px 0 2px;
   font-size: 14px;
 }
+
+/* --- Hover effect for all modules --- */
+#bluetooth:hover,
+#pulseaudio:hover,
+#tray:hover,
+#custom-recorder:hover,
+#custom-keybinds:hover {
+  background: rgba(203, 166, 247, 0.2);  
+  color: #cba6f7;
+    box-shadow: 0 0 8px rgba(203, 166, 247, 0.5);
+  transition: background 0.2s ease, color 0.2s ease;
+}
