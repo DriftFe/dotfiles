@@ -11,6 +11,8 @@
     "pulseaudio",
     "custom/brightness",
     "custom/recorder",
+    "custom/keybinds",
+    "custom/quickshell",
     "tray"
   ],
 
@@ -53,6 +55,8 @@
     "on-click": "blueman-manager"
   },
 
+  
+
   "battery": {
     "format": "{capacity}% {icon}",
     "format-charging": " {capacity}% {icon}",
@@ -90,6 +94,14 @@
     "on-click": "~/.config/waybar/scripts/toggle-recording.sh",
     "interval": 1
   },
+
+  "custom/keybinds": {
+  "format": "",
+  "tooltip": "Show Hyprland Keybinds",
+  "on-click": "~/.config/waybar/scripts/show-keybinds.sh",
+  "interval": 3600
+  },
+
 
   "tray": {
     "spacing": 10
