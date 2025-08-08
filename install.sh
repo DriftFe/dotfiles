@@ -60,8 +60,8 @@ case "$DISTRO" in
     sudo pacman -Syu --noconfirm
 
     pacman_pkgs=(
-      hyprland waybar kitty nautilus wofi sddm wl-clipboard swaybg
-      gtk3 gtk4 playerctl flatpak hyprpaper hyprlock pavucontrol
+      hyprland waybar kitty nautilus wofi wl-clipboard swaybg
+      gtk3 gtk4 playerctl flatpak hyprpaper hyprlock pavucontrol gdm
       ttf-jetbrains-mono ttf-fira-code ttf-roboto
     )
 
@@ -83,20 +83,19 @@ case "$DISTRO" in
     fi
 
     yay -S --needed --noconfirm "${aur_pkgs[@]}"
-    sudo systemctl enable sddm
     ;;
 
   fedora)
     sudo dnf update -y
     sudo dnf install -y zsh git curl wget unzip nano vim fastfetch htop mpv kitty waybar wl-clipboard swaybg \
-      nautilus wofi sddm gtk3 gtk4 playerctl flatpak jetbrains-mono-fonts fira-code-fonts google-roboto-fonts fontawesome-fonts
-    sudo systemctl enable sddm
+      nautilus wofi gtk3 gtk4 playerctl flatpak gdm \
+      jetbrains-mono-fonts fira-code-fonts google-roboto-fonts fontawesome-fonts
     ;;
 
   gentoo)
     sudo emerge --sync
     sudo emerge --ask zsh git curl wget unzip nano vim fastfetch htop mpv x11-terms/kitty x11-misc/waybar \
-      gui-apps/wofi gui-apps/swaybg x11-misc/wl-clipboard gui-apps/hyprland media-fonts/noto media-fonts/roboto media-fonts/jetbrains-mono
+      gui-apps/wofi gui-apps/swaybg x11-misc/wl-clipboard gui-apps/hyprland media-fonts/noto media-fonts/roboto media-fonts/jetbrains-mono gdm
     ;;
 
   nixos)
@@ -124,11 +123,30 @@ rsync -av --exclude=".zshrc" --exclude=".oh-my-zsh" "$TMP_DIR/dot_config/" ~/.co
 [ -f "$TMP_DIR/dot_config/.zshrc" ] && cp -f "$TMP_DIR/dot_config/.zshrc" ~/.zshrc
 [ -d "$TMP_DIR/dot_config/.oh-my-zsh" ] && rsync -av "$TMP_DIR/dot_config/.oh-my-zsh/" ~/.oh-my-zsh/
 
-# ─── Enable SDDM ─────────────
-if command -v systemctl &>/dev/null; then
-  echo "[*] Enabling SDDM..."
-  sudo systemctl enable sddm || true
-fi
+# ─── Setup GDM Auto-Login to Hyprland ─────────────
+echo "[*] Setting up GDM for Hyprland auto-login..."
+
+# Create session file
+sudo tee /usr/share/wayland-sessions/hyprland.desktop > /dev/null <<'EOF'
+[Desktop Entry]
+Name=Hyprland
+Comment=Dynamic tiling Wayland compositor
+Exec=/usr/bin/Hyprland
+Type=Application
+EOF
+
+# Enable GDM
+sudo systemctl enable gdm
+
+# Configure auto-login
+sudo mkdir -p /var/lib/AccountsService/users
+sudo tee /var/lib/AccountsService/users/$USER > /dev/null <<EOF
+[User]
+XSession=hyprland
+EOF
+
+sudo sed -i "/^\[daemon\]/,/^\[/ s/^#*AutomaticLoginEnable=.*/AutomaticLoginEnable=True/" /etc/gdm/custom.conf || echo -e "[daemon]\nAutomaticLoginEnable=True" | sudo tee -a /etc/gdm/custom.conf
+sudo sed -i "/^\[daemon\]/,/^\[/ s/^#*AutomaticLogin=.*/AutomaticLogin=$USER/" /etc/gdm/custom.conf || echo "AutomaticLogin=$USER" | sudo tee -a /etc/gdm/custom.conf
 
 # ─── Final zshrc Tweaks ────────────
 sed -i '/\.zsh\/zsh-autosuggestions/d' ~/.zshrc || true
@@ -147,11 +165,11 @@ rm -rf "$TMP_DIR"
 
 if $USE_GUI; then
   zenity --info --title="Installation Complete" \
-    --text="All done! You may want to reboot now."
+    --text="All done! Your system will boot directly into Hyprland via GDM."
   zenity --question --text="Reboot now?"
   [ $? -eq 0 ] && reboot
 else
-  echo "[✓] Installation complete."
+  echo "[✓] Installation complete. Your system will boot directly into Hyprland via GDM."
   read -p "Reboot now? (y/n): " reboot
   [[ "$reboot" =~ ^[Yy]$ ]] && reboot
 fi
