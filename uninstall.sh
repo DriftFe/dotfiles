@@ -25,9 +25,6 @@ if [ -f /etc/os-release ]; then
     gentoo)
       DISTRO="gentoo"
       ;;
-    debian|ubuntu|pop|linuxmint)
-      DISTRO="debian"
-      ;;
     nixos)
       DISTRO="nixos"
       ;;
@@ -71,11 +68,11 @@ fi
 if [ "$DISTRO" = "arch" ]; then
   sudo pacman -Rns --noconfirm kitty nautilus wofi sddm waybar hyprpaper hyprlock || true
 elif [ "$DISTRO" = "fedora" ]; then
-  sudo dnf remove -y kitty nautilus wofi sddm waybar || true
+  sudo dnf remove -y kitty nautilus wofi sddm waybar hyprpaper hyprlock || true
 elif [ "$DISTRO" = "gentoo" ]; then
   sudo emerge --ask --depclean x11-terms/kitty gui-apps/wofi gui-apps/sddm x11-misc/waybar || true
-elif [ "$DISTRO" = "debian" ]; then
-  sudo apt remove -y kitty nautilus wofi sddm waybar || true
+elif [ "$DISTRO" = "nixos" ]; then
+  echo "[!] On NixOS, please remove Hyprland and related configs via your configuration.nix"
 fi
 
 # ─── Offer to Restore from GitHub ─────────────
