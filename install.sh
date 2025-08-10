@@ -55,16 +55,16 @@ fi
 
 # ─── Install Packages ─────────────────────────────
 if [ "$DISTRO" = "arch" ]; then
-  sudo pacman -Syu --noconfirm hyprland kitty nautilus wofi sddm waybar hyprpaper hyprlock
+  sudo pacman -Syu --noconfirm hyprland kitty nautilus wofi gdm waybar hyprpaper hyprlock
   if command -v yay &>/dev/null; then
     yay -S --noconfirm cava cbonsai wofi-emoji starship touchegg \
       oh-my-zsh-git zsh-theme-powerlevel10k-git grimblast swappy \
       gpu-screen-recorder vesktop visual-studio-code-bin spotify zen-browser-bin goonsh
   fi
 elif [ "$DISTRO" = "fedora" ]; then
-  sudo dnf install -y hyprland kitty nautilus wofi sddm waybar hyprpaper hyprlock
+  sudo dnf install -y hyprland kitty nautilus wofi gdm waybar hyprpaper hyprlock
 elif [ "$DISTRO" = "gentoo" ]; then
-  sudo emerge --ask gui-wm/hyprland x11-terms/kitty gui-apps/wofi gui-apps/sddm x11-misc/waybar
+  sudo emerge --ask gui-wm/hyprland x11-terms/kitty gui-apps/wofi gdm x11-misc/waybar
 elif [ "$DISTRO" = "nixos" ]; then
   echo "[!] On NixOS, please add Hyprland and related packages to your configuration.nix"
 fi
@@ -79,9 +79,27 @@ cp "$TMP_DIR/dot_config/.zshrc" ~/.zshrc 2>/dev/null || true
 [ -d "$TMP_DIR/dot_config/.oh-my-zsh" ] && rsync -av "$TMP_DIR/dot_config/.oh-my-zsh/" ~/.oh-my-zsh/
 rm -rf "$TMP_DIR"
 
-# ─── Enable SDDM ─────────────────────────────
-echo "[*] Enabling SDDM..."
-sudo systemctl enable sddm
+# ─── Enable GDM & Set Hyprland as Default ─────────────────────────────
+echo "[*] Enabling GDM..."
+sudo systemctl enable gdm
+
+# Ensure Hyprland session file exists
+if [ ! -f /usr/share/wayland-sessions/hyprland.desktop ]; then
+  echo "[!] Hyprland session file not found. Creating one..."
+  sudo mkdir -p /usr/share/wayland-sessions
+  sudo tee /usr/share/wayland-sessions/hyprland.desktop >/dev/null <<EOF
+[Desktop Entry]
+Name=Hyprland
+Comment=An cool and dynamic tiling wayland compositor
+Exec=Hyprland
+Type=Application
+DesktopNames=Hyprland
+EOF
+fi
+
+# Set Hyprland as default for GDM
+sudo mkdir -p /var/lib/AccountsService/users
+echo -e "[User]\nSession=hyprland\n" | sudo tee "/var/lib/AccountsService/users/$USER" >/dev/null
 
 # ─── Done ─────────────────────────────
 if $USE_GUI; then
