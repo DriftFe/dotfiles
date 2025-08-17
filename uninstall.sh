@@ -38,7 +38,7 @@ fi
 
 # ─── Confirm Uninstall ─────────────────────
 if $USE_GUI; then
-  zenity --question --title="Uninstall Dotfiles" \
+  zenity --question --title="Uninstall Lavender Dotfiles" \
     --text="This will remove all configs and dotfiles except Hyprland itself. Continue?"
   [ $? -ne 0 ] && zenity --info --text="Uninstallation cancelled." && exit 0
 else
@@ -52,7 +52,7 @@ echo "[*] Disabling SDDM..."
 sudo systemctl disable sddm || true
 
 # ─── Remove Dotfiles ───────────────────
-echo "[*] Removing dotfiles and configs..."
+echo "[*] Removing Lavender Dotfiles and configs..."
 rm -rf ~/.config/{waybar,kitty,wofi,sddm,vesktop,hypr,hyprpaper,cava,zsh,fastfetch} \
        ~/.wallpapers ~/.oh-my-zsh ~/.zshrc ~/.config/starship.toml
 
@@ -77,7 +77,7 @@ fi
 
 # ─── Offer to Restore from GitHub ─────────────
 if $USE_GUI; then
-  zenity --question --title="Restore Dotfiles" \
+  zenity --question --title="Restore Lavender Dotfiles" \
     --text="Would you like to restore the latest dotfiles from GitHub?"
   RESTORE=$?
 else
@@ -86,7 +86,7 @@ else
 fi
 
 if [ "$RESTORE" -eq 0 ]; then
-  echo "[*] Cloning latest dotfiles..."
+  echo "[*] Cloning latest Lavender Dotfiles..."
   TMP_RESTORE=$(mktemp -d)
   git clone --depth=1 "$REPO_URL" "$TMP_RESTORE"
   mkdir -p ~/.config
@@ -94,7 +94,7 @@ if [ "$RESTORE" -eq 0 ]; then
   cp "$TMP_RESTORE/dot_config/.zshrc" ~/.zshrc 2>/dev/null || true
   [ -d "$TMP_RESTORE/dot_config/.oh-my-zsh" ] && rsync -av "$TMP_RESTORE/dot_config/.oh-my-zsh/" ~/.oh-my-zsh/
   rm -rf "$TMP_RESTORE"
-  echo "[✓] Dotfiles restored."
+  echo "[✓] Lavender Dotfiles restored."
 fi
 
 # ─── Cleanup Complete ─────────────────
