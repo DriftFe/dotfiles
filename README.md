@@ -127,6 +127,9 @@ The installer automatically handles most dependencies, but ensure you have:
 ## Troubleshooting
 
 ### Common Issues
+**No Permission:**
+```bash
+chmod +x [script].sh
 
 **Hyprland won't start:**
 ```bash
