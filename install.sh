@@ -2,112 +2,285 @@
 set -e
 
 REPO_URL="https://github.com/DriftFe/dotfiles"
+SCRIPT_NAME="Lavender Dotfiles Installer"
 
 # ─── Zenity Environment Check ─────────────────────────────
 USE_GUI=false
-
-if command -v zenity &>/dev/null && { [ "$DISPLAY" ] || [ "$WAYLAND_DISPLAY" ]; }; then
-  USE_GUI=true
+if command -v zenity &>/dev/null && { [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; }; then
+    USE_GUI=true
 else
-  echo "[*] No GUI detected or Zenity not installed. Falling back to terminal mode."
+    echo "[*] No GUI detected or Zenity not installed. Falling back to terminal mode."
+fi
+
+# ─── Helper Functions ─────────────────────────────
+show_message() {
+    local title="$1"
+    local message="$2"
+    local type="${3:-info}"  # info, error, warning
+    
+    if $USE_GUI; then
+        case "$type" in
+            "error")
+                zenity --error --title="$title" --text="$message"
+                ;;
+            "warning")
+                zenity --warning --title="$title" --text="$message"
+                ;;
+            *)
+                zenity --info --title="$title" --text="$message"
+                ;;
+        esac
+    else
+        echo "[$type] $message"
+    fi
+}
+
+ask_question() {
+    local message="$1"
+    local title="${2:-$SCRIPT_NAME}"
+    
+    if $USE_GUI; then
+        zenity --question --title="$title" --text="$message"
+        return $?
+    else
+        echo "[?] $message"
+        read -p "Proceed? (y/n): " confirm
+        [[ "$confirm" =~ ^[Yy]$ ]] && return 0 || return 1
+    fi
+}
+
+# ─── Error Handler ─────────────────────────────
+cleanup_and_exit() {
+    local exit_code=$1
+    [ -d "$TMP_DIR" ] && rm -rf "$TMP_DIR"
+    exit $exit_code
+}
+
+# Set up error handling
+trap 'cleanup_and_exit 1' ERR
+trap 'cleanup_and_exit 0' INT TERM
+
+# ─── Pre-flight Checks ─────────────────────────────
+if ! command -v git &>/dev/null; then
+    show_message "$SCRIPT_NAME" "Git is not installed. Please install git first." "error"
+    exit 1
+fi
+
+if ! command -v rsync &>/dev/null; then
+    show_message "$SCRIPT_NAME" "rsync is not installed. Please install rsync first." "error"
+    exit 1
 fi
 
 # ─── Detect Distro ─────────────────────────────
 if [ -f /etc/os-release ]; then
-  . /etc/os-release
-  case "$ID" in
-    arch|manjaro|endeavouros)
-      DISTRO="arch"
-      ;;
-    fedora|rhel|centos)
-      DISTRO="fedora"
-      ;;
-    gentoo)
-      DISTRO="gentoo"
-      ;;
-    nixos)
-      DISTRO="nixos"
-      ;;
-    debian|ubuntu|pop|linuxmint)
-      echo "[✗] This installer does NOT support Debian-based distros."
-      echo "Please use Arch, Fedora, Gentoo, or NixOS instead."
-      exit 1
-      ;;
-    *)
-      DISTRO="$ID"
-      ;;
-  esac
+    . /etc/os-release
+    case "$ID" in
+        arch|manjaro|endeavouros|artix|cachyos)
+            DISTRO="arch"
+            ;;
+        fedora|rhel|centos|rocky|almalinux)
+            DISTRO="fedora"
+            ;;
+        gentoo|funtoo)
+            DISTRO="gentoo"
+            ;;
+        nixos)
+            DISTRO="nixos"
+            ;;
+        opensuse*|sles)
+            DISTRO="opensuse"
+            ;;
+        void)
+            DISTRO="void"
+            ;;
+        debian|ubuntu|pop|linuxmint|elementary|zorin|deepin)
+            show_message "$SCRIPT_NAME" "This installer does NOT support Debian-based distros.\nPlease use Arch, Fedora, Gentoo, or NixOS instead." "error"
+            exit 1
+            ;;
+        *)
+            show_message "$SCRIPT_NAME" "Unsupported distribution: $ID\nSupported: Arch, Fedora, Gentoo, NixOS, openSUSE, Void" "warning"
+            if ! ask_question "Continue anyway? (Package installation may fail)"; then
+                exit 1
+            fi
+            DISTRO="$ID"
+            ;;
+    esac
 else
-  echo "[✗] Could not detect your Linux distribution."
-  exit 1
+    show_message "$SCRIPT_NAME" "Could not detect your Linux distribution." "error"
+    exit 1
 fi
 
+echo "[*] Detected distribution: $DISTRO"
+
 # ─── Confirm Install ─────────────────────────────
-if $USE_GUI; then
-  zenity --question --title="Install Lavender Dotfiles" \
-    --text="This will install Hyprland, Dependencies, and Lavender dotfiles. Continue?"
-  [ $? -ne 0 ] && zenity --info --text="Installation cancelled." && exit 0
-else
-  echo "[*] This will install Hyprland, Dependencies, and Lavender Dotfiles."
-  read -p "Are you sure? (y/n): " confirm
-  [[ "$confirm" != "y" && "$confirm" != "Y" ]] && echo "Cancelled." && exit 0
+if ! ask_question "This will install Hyprland, Dependencies, and Lavender dotfiles. Continue?" "Install Lavender Dotfiles"; then
+    show_message "$SCRIPT_NAME" "Installation cancelled."
+    exit 0
+fi
+
+# ─── Backup Existing Configs ─────────────────────────────
+BACKUP_NEEDED=false
+BACKUP_CONFIGS=()
+
+# Check for existing configs
+for config in waybar kitty wofi hypr hyprpaper; do
+    if [ -d "$HOME/.config/$config" ]; then
+        BACKUP_NEEDED=true
+        BACKUP_CONFIGS+=("$config")
+    fi
+done
+
+if [ -f "$HOME/.zshrc" ]; then
+    BACKUP_NEEDED=true
+    BACKUP_CONFIGS+=(".zshrc")
+fi
+
+if $BACKUP_NEEDED; then
+    BACKUP_DIR="$HOME/.config_backup_$(date +%Y%m%d_%H%M%S)"
+    if ask_question "Existing configs detected: ${BACKUP_CONFIGS[*]}\nCreate backup in $BACKUP_DIR?"; then
+        echo "[*] Creating backup..."
+        mkdir -p "$BACKUP_DIR"
+        for config in "${BACKUP_CONFIGS[@]}"; do
+            if [ "$config" = ".zshrc" ]; then
+                [ -f "$HOME/.zshrc" ] && cp "$HOME/.zshrc" "$BACKUP_DIR/"
+            else
+                [ -d "$HOME/.config/$config" ] && cp -r "$HOME/.config/$config" "$BACKUP_DIR/"
+            fi
+        done
+        echo "[*] Backup created at: $BACKUP_DIR"
+    fi
 fi
 
 # ─── Install Packages ─────────────────────────────
-if [ "$DISTRO" = "arch" ]; then
-  sudo pacman -Syu --noconfirm hyprland kitty nautilus wofi gdm waybar hyprpaper hyprlock
-  if command -v yay &>/dev/null; then
-    yay -S --noconfirm cava cbonsai wofi-emoji starship touchegg \
-      oh-my-zsh-git zsh-theme-powerlevel10k-git grimblast swappy \
-      gpu-screen-recorder vesktop visual-studio-code-bin spotify zen-browser-bin goonsh
-  fi
-elif [ "$DISTRO" = "fedora" ]; then
-  sudo dnf install -y hyprland kitty nautilus wofi gdm waybar hyprpaper hyprlock
-elif [ "$DISTRO" = "gentoo" ]; then
-  sudo emerge --ask gui-wm/hyprland x11-terms/kitty gui-apps/wofi gdm x11-misc/waybar
-elif [ "$DISTRO" = "nixos" ]; then
-  echo "[!] On NixOS, please add Hyprland and related packages to your configuration.nix"
-fi
+CORE_PACKAGES="hyprland kitty nautilus wofi gdm waybar hyprpaper hyprlock"
+AUR_PACKAGES="cava cbonsai wofi-emoji starship touchegg oh-my-zsh-git zsh-theme-powerlevel10k-git grimblast swappy gpu-screen-recorder vesktop visual-studio-code-bin spotify zen-browser-bin goonsh"
+
+echo "[*] Installing core packages..."
+
+case "$DISTRO" in
+    "arch")
+        echo "[*] Updating system packages..."
+        sudo pacman -Syu --noconfirm
+        
+        echo "[*] Installing core packages: $CORE_PACKAGES"
+        sudo pacman -S --needed --noconfirm $CORE_PACKAGES
+        
+        # Install AUR packages
+        if command -v yay &>/dev/null; then
+            echo "[*] Installing AUR packages with yay..."
+            yay -S --needed --noconfirm $AUR_PACKAGES || echo "[!] Some AUR packages failed to install"
+        elif command -v paru &>/dev/null; then
+            echo "[*] Installing AUR packages with paru..."
+            paru -S --needed --noconfirm $AUR_PACKAGES || echo "[!] Some AUR packages failed to install"
+        else
+            echo "[!] No AUR helper found. Install yay or paru for additional packages."
+        fi
+        ;;
+    "fedora")
+        echo "[*] Installing packages with dnf..."
+        sudo dnf install -y $CORE_PACKAGES || echo "[!] Some packages may not be available in Fedora repos"
+        ;;
+    "gentoo")
+        echo "[*] Installing packages with emerge..."
+        sudo emerge --ask --update --deep --newuse @world
+        sudo emerge --ask gui-wm/hyprland x11-terms/kitty gui-apps/wofi gnome-base/gdm x11-misc/waybar || echo "[!] Some packages may not be available"
+        ;;
+    "nixos")
+        show_message "$SCRIPT_NAME" "On NixOS, please add Hyprland and related packages to your configuration.nix\nThen run: sudo nixos-rebuild switch" "warning"
+        ;;
+    "opensuse")
+        echo "[*] Installing packages with zypper..."
+        sudo zypper install -y $CORE_PACKAGES || echo "[!] Some packages may not be available"
+        ;;
+    "void")
+        echo "[*] Installing packages with xbps..."
+        sudo xbps-install -Sy $CORE_PACKAGES || echo "[!] Some packages may not be available"
+        ;;
+    *)
+        show_message "$SCRIPT_NAME" "Package installation not implemented for: $DISTRO\nPlease manually install: $CORE_PACKAGES" "warning"
+        ;;
+esac
 
 # ─── Clone and Apply Dotfiles ─────────────────────────────
-echo "[*] Downloading and applying Lavender Dotfiles..."
+echo "[*] Downloading Lavender Dotfiles..."
 TMP_DIR=$(mktemp -d)
-git clone --depth=1 "$REPO_URL" "$TMP_DIR"
+
+if ! git clone --depth=1 "$REPO_URL" "$TMP_DIR"; then
+    show_message "$SCRIPT_NAME" "Failed to clone repository. Check your internet connection." "error"
+    cleanup_and_exit 1
+fi
+
+if [ ! -d "$TMP_DIR/dot_config" ]; then
+    show_message "$SCRIPT_NAME" "Repository structure is unexpected. 'dot_config' directory not found." "error"
+    cleanup_and_exit 1
+fi
+
+echo "[*] Applying Lavender Dotfiles..."
 mkdir -p ~/.config
-rsync -av "$TMP_DIR/dot_config/" ~/.config/
-cp "$TMP_DIR/dot_config/.zshrc" ~/.zshrc 2>/dev/null || true
-[ -d "$TMP_DIR/dot_config/.oh-my-zsh" ] && rsync -av "$TMP_DIR/dot_config/.oh-my-zsh/" ~/.oh-my-zsh/
-rm -rf "$TMP_DIR"
+
+# Apply configs
+if ! rsync -av "$TMP_DIR/dot_config/" ~/.config/; then
+    show_message "$SCRIPT_NAME" "Failed to copy configuration files." "error"
+    cleanup_and_exit 1
+fi
+
+# Handle special files
+if [ -f "$TMP_DIR/dot_config/.zshrc" ]; then
+    cp "$TMP_DIR/dot_config/.zshrc" ~/.zshrc || echo "[!] Failed to copy .zshrc"
+fi
+
+if [ -d "$TMP_DIR/dot_config/.oh-my-zsh" ]; then
+    echo "[*] Setting up oh-my-zsh..."
+    mkdir -p ~/.oh-my-zsh
+    rsync -av "$TMP_DIR/dot_config/.oh-my-zsh/" ~/.oh-my-zsh/ || echo "[!] Failed to copy oh-my-zsh"
+fi
+
+echo "[✓] Dotfiles applied successfully!"
 
 # ─── Enable GDM & Set Hyprland as Default ─────────────────────────────
-echo "[*] Enabling GDM..."
-sudo systemctl enable gdm
-
-# Ensure Hyprland session file exists
-if [ ! -f /usr/share/wayland-sessions/hyprland.desktop ]; then
-  echo "[!] Hyprland session file not found. Creating one..."
-  sudo mkdir -p /usr/share/wayland-sessions
-  sudo tee /usr/share/wayland-sessions/hyprland.desktop >/dev/null <<EOF
+if [ "$DISTRO" != "nixos" ]; then
+    echo "[*] Configuring display manager..."
+    
+    # Enable GDM
+    if systemctl list-unit-files | grep -q "gdm.service"; then
+        sudo systemctl enable gdm || echo "[!] Failed to enable GDM"
+    else
+        echo "[!] GDM service not found. You may need to configure your display manager manually."
+    fi
+    
+    # Ensure Hyprland session file exists
+    HYPRLAND_SESSION="/usr/share/wayland-sessions/hyprland.desktop"
+    if [ ! -f "$HYPRLAND_SESSION" ]; then
+        echo "[*] Creating Hyprland session file..."
+        sudo mkdir -p /usr/share/wayland-sessions
+        sudo tee "$HYPRLAND_SESSION" >/dev/null <<EOF
 [Desktop Entry]
 Name=Hyprland
-Comment=An cool and dynamic tiling wayland compositor
+Comment=A dynamic tiling Wayland compositor
 Exec=Hyprland
 Type=Application
 DesktopNames=Hyprland
 EOF
+    fi
+    
+    # Set Hyprland as default for current user
+    echo "[*] Setting Hyprland as default session..."
+    sudo mkdir -p /var/lib/AccountsService/users
+    echo -e "[User]\nSession=hyprland\nXSession=\nSystemAccount=false" | sudo tee "/var/lib/AccountsService/users/$USER" >/dev/null
+else
+    echo "[*] On NixOS, configure your display manager in configuration.nix"
 fi
 
-# Set Hyprland as default for GDM
-sudo mkdir -p /var/lib/AccountsService/users
-echo -e "[User]\nSession=hyprland\n" | sudo tee "/var/lib/AccountsService/users/$USER" >/dev/null
+# Clean up
+cleanup_and_exit 0
 
-# ─── Done ─────────────────────────────
-if $USE_GUI; then
-  zenity --question --title="Install Complete" \
-    --text="Installation complete. Reboot now?"
-  [ $? -eq 0 ] && reboot
+# ─── Installation Complete ─────────────────────────────
+show_message "$SCRIPT_NAME" "Installation completed successfully!"
+
+if ask_question "Installation complete. Reboot now to start using Hyprland?" "Install Complete"; then
+    echo "[*] Rebooting system..."
+    sudo reboot
 else
-  echo "[✓] Installation complete."
-  read -p "Reboot now? (y/n): " reboot
-  [[ "$reboot" =~ ^[Yy]$ ]] && reboot
+    echo "[*] Please reboot your system to start using Hyprland."
+    echo "[*] After reboot, select 'Hyprland' from your login screen."
 fi
