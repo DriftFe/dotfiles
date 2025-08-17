@@ -44,11 +44,11 @@ fi
 
 # ─── Confirm Install ─────────────────────────────
 if $USE_GUI; then
-  zenity --question --title="Install Dotfiles" \
-    --text="This will install Hyprland, dependencies, and your dotfiles. Continue?"
+  zenity --question --title="Install Lavender Dotfiles" \
+    --text="This will install Hyprland, Dependencies, and Lavender dotfiles. Continue?"
   [ $? -ne 0 ] && zenity --info --text="Installation cancelled." && exit 0
 else
-  echo "[*] This will install Hyprland, dependencies, and dotfiles."
+  echo "[*] This will install Hyprland, Dependencies, and Lavender Dotfiles."
   read -p "Are you sure? (y/n): " confirm
   [[ "$confirm" != "y" && "$confirm" != "Y" ]] && echo "Cancelled." && exit 0
 fi
@@ -70,7 +70,7 @@ elif [ "$DISTRO" = "nixos" ]; then
 fi
 
 # ─── Clone and Apply Dotfiles ─────────────────────────────
-echo "[*] Downloading and applying dotfiles..."
+echo "[*] Downloading and applying Lavender Dotfiles..."
 TMP_DIR=$(mktemp -d)
 git clone --depth=1 "$REPO_URL" "$TMP_DIR"
 mkdir -p ~/.config
