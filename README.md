@@ -117,8 +117,8 @@ The installer automatically handles most dependencies, but ensure you have:
 1. **Reboot your system** for all changes to take effect
 2. **Log in with GDM** - Hyprland will be the default session
 3. **Launch applications:**
-   - `Super + D` - Open Wofi launcher
-   - `Super + Enter` - Open Kitty terminal
+   - `Super + A` - Open Wofi launcher
+   - `Super + T` - Open Kitty terminal
    - `Super + Q` - Close window
    - `Super + M` - Exit Hyprland
 
