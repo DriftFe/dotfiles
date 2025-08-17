@@ -224,6 +224,26 @@ if ! rsync -av "$TMP_DIR/dot_config/" ~/.config/; then
     cleanup_and_exit 1
 fi
 
+# Make scripts executable
+echo "[*] Setting executable permissions for scripts..."
+find ~/.config -name "*.sh" -type f -exec chmod +x {} \; 2>/dev/null || true
+find ~/.config -name "*.py" -type f -exec chmod +x {} \; 2>/dev/null || true
+
+# Handle common script directories that should be executable
+SCRIPT_DIRS=(
+    "$HOME/.config/hypr/scripts"
+    "$HOME/.config/waybar/scripts" 
+    "$HOME/.config/wofi/scripts"
+    "$HOME/.local/bin"
+)
+
+for dir in "${SCRIPT_DIRS[@]}"; do
+    if [ -d "$dir" ]; then
+        echo "[*] Making scripts in $dir executable..."
+        find "$dir" -type f \( -name "*.sh" -o -name "*.py" -o -name "*.pl" -o -name "*.rb" -o -executable \) -exec chmod +x {} \; 2>/dev/null || true
+    fi
+done
+
 # Handle special files
 if [ -f "$TMP_DIR/dot_config/.zshrc" ]; then
     cp "$TMP_DIR/dot_config/.zshrc" ~/.zshrc || echo "[!] Failed to copy .zshrc"
@@ -233,6 +253,21 @@ if [ -d "$TMP_DIR/dot_config/.oh-my-zsh" ]; then
     echo "[*] Setting up oh-my-zsh..."
     mkdir -p ~/.oh-my-zsh
     rsync -av "$TMP_DIR/dot_config/.oh-my-zsh/" ~/.oh-my-zsh/ || echo "[!] Failed to copy oh-my-zsh"
+    
+    # Make oh-my-zsh scripts executable
+    find ~/.oh-my-zsh -name "*.sh" -type f -exec chmod +x {} \; 2>/dev/null || true
+fi
+
+# Create ~/.local/bin if it doesn't exist and add to PATH
+mkdir -p ~/.local/bin
+if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
+    echo "[*] Adding ~/.local/bin to PATH in shell config..."
+    if [ -f ~/.zshrc ]; then
+        grep -q 'export PATH="$HOME/.local/bin:$PATH"' ~/.zshrc || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+    fi
+    if [ -f ~/.bashrc ]; then
+        grep -q 'export PATH="$HOME/.local/bin:$PATH"' ~/.bashrc || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+    fi
 fi
 
 echo "[✓] Dotfiles applied successfully!"
