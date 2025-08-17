@@ -14,7 +14,7 @@ fi
 
 # ─── Confirm Update ─────────────────────
 if $USE_GUI; then
-  zenity --question --title="Update Dotfiles" \
+  zenity --question --title="Update Lavender Dotfiles" \
     --text="Check for dotfile updates from GitHub and apply if changed?"
   [ $? -ne 0 ] && zenity --info --text="Update cancelled." && exit 0
 else
@@ -29,16 +29,16 @@ git clone --depth=1 "$REPO_URL" "$TMP_DIR"
 changes=$(diff -qr "$TMP_DIR/dot_config" "$HOME/.config" | grep -v ".git")
 
 if [ -z "$changes" ]; then
-  $USE_GUI && zenity --info --title="Dotfiles Updater" --text="✅ Dotfiles are up to date." || echo "[✓] Dotfiles are up to date."
+  $USE_GUI && zenity --info --title="Lavender Dotfiles Updater" --text="✅ Lavender Dotfiles are up to date." || echo "[✓] Lavender Dotfiles are up to date."
 else
-  $USE_GUI && zenity --question --title="Dotfiles Updater" --text="⚠️ Changes detected. Update local config?"
+  $USE_GUI && zenity --question --title=" Lavender Dotfiles Updater" --text="⚠️ Changes detected. Update local config?"
   if ! $USE_GUI || [ $? -eq 0 ]; then
     rsync -av --delete "$TMP_DIR/dot_config/" "$HOME/.config/"
     [ -f "$TMP_DIR/dot_config/.zshrc" ] && cp -f "$TMP_DIR/dot_config/.zshrc" ~/.zshrc
     [ -d "$TMP_DIR/dot_config/.oh-my-zsh" ] && rsync -av "$TMP_DIR/dot_config/.oh-my-zsh/" ~/.oh-my-zsh/
-    $USE_GUI && zenity --info --title="Dotfiles Updater" --text="✅ Dotfiles updated." || echo "[✓] Dotfiles updated."
+    $USE_GUI && zenity --info --title="Lavender Dotfiles Updater" --text="✅ Lavender Dotfiles updated." || echo "[✓] Lavender Dotfiles updated."
   else
-    $USE_GUI && zenity --info --title="Dotfiles Updater" --text="Update cancelled." || echo "[x] Update cancelled."
+    $USE_GUI && zenity --info --title="Lavender Dotfiles Updater" --text="Update cancelled." || echo "[x] Update cancelled."
   fi
 fi
 
