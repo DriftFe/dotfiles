@@ -88,7 +88,7 @@ Modify Hyprland keybindings in:
 vim ~/.config/hypr/keys.conf
 ```
 
-### 🐚 **Shell Configuration**
+### **Shell Configuration**
 Customize your shell experience:
 ```bash
 # Edit Zsh config
