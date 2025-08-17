@@ -123,6 +123,13 @@ window#waybar {
   font-size: 14px;
 }
 
+#custom-keybinds {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: 8px 6px 0 2px;
+  color: #fff;
+}
 /* --- Hover effect for all modules --- */
 #bluetooth:hover,
 #pulseaudio:hover,
