@@ -275,13 +275,13 @@ echo "[✓] Dotfiles applied successfully!"
 # ─── Configure Dark Theme for GTK Applications ─────────────────────────────
 echo "[*] Configuring dark theme for GTK applications..."
 
-# Set GTK theme via gsettings
+# Set GTK theme via gsettings (modern method)
 echo "[*] Setting GTK theme to dark via gsettings..."
-gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark' 2>/dev/null || true
 gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' 2>/dev/null || true
+gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark' 2>/dev/null || true
 gsettings set org.gnome.desktop.interface icon-theme 'Adwaita' 2>/dev/null || true
 
-# Create GTK-3 config
+# Create GTK-3 config (for older GTK3 applications)
 echo "[*] Creating GTK-3 configuration..."
 mkdir -p ~/.config/gtk-3.0
 cat > ~/.config/gtk-3.0/settings.ini << EOF
@@ -304,17 +304,43 @@ gtk-xft-hintstyle=hintfull
 gtk-xft-rgba=rgb
 EOF
 
-# Create GTK-4 config
+# Create GTK-4 config (modern libadwaita-compatible)
 echo "[*] Creating GTK-4 configuration..."
 mkdir -p ~/.config/gtk-4.0
 cat > ~/.config/gtk-4.0/settings.ini << EOF
 [Settings]
-gtk-application-prefer-dark-theme=1
 gtk-theme-name=Adwaita-dark
 gtk-icon-theme-name=Adwaita
 gtk-font-name=JetBrains Mono 11
 gtk-cursor-theme-name=Bibata-Modern-Classic
 gtk-cursor-theme-size=24
+gtk-enable-animations=true
+EOF
+
+# Create modern CSS for GTK-4 (libadwaita)
+echo "[*] Creating GTK-4 CSS for libadwaita..."
+mkdir -p ~/.config/gtk-4.0
+cat > ~/.config/gtk-4.0/gtk.css << EOF
+/* Force dark theme for libadwaita applications */
+@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");
+
+/* Ensure dark theme for all windows */
+window {
+  color-scheme: dark;
+}
+
+/* Force dark scrollbars */
+scrollbar {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+scrollbar slider {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+scrollbar slider:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
 EOF
 
 # Create Nautilus dark theme wrapper
@@ -323,9 +349,10 @@ cat > ~/.local/bin/nautilus-dark << 'EOF'
 #!/bin/bash
 # Nautilus Dark Theme Wrapper
 
-# Set environment variables for this session
+# Set environment variables for dark theme
 export GTK_THEME="Adwaita-dark"
 export GTK2_RC_FILES="/usr/share/themes/Adwaita-dark/gtk-2.0/gtkrc"
+export ADWAITA_COLOR_SCHEME="dark"
 
 # Launch Nautilus with dark theme
 exec /usr/bin/nautilus "$@"
@@ -333,7 +360,7 @@ EOF
 
 chmod +x ~/.local/bin/nautilus-dark
 
-echo "[✓] Dark theme configuration applied!"
+echo "[✓] Dark theme configuration applied (libadwaita-compatible)!"
 
 # ─── Enable GDM & Set Hyprland as Default ─────────────────────────────
 if [ "$DISTRO" != "nixos" ]; then
