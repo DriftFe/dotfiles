@@ -272,6 +272,69 @@ fi
 
 echo "[✓] Dotfiles applied successfully!"
 
+# ─── Configure Dark Theme for GTK Applications ─────────────────────────────
+echo "[*] Configuring dark theme for GTK applications..."
+
+# Set GTK theme via gsettings
+echo "[*] Setting GTK theme to dark via gsettings..."
+gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark' 2>/dev/null || true
+gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' 2>/dev/null || true
+gsettings set org.gnome.desktop.interface icon-theme 'Adwaita' 2>/dev/null || true
+
+# Create GTK-3 config
+echo "[*] Creating GTK-3 configuration..."
+mkdir -p ~/.config/gtk-3.0
+cat > ~/.config/gtk-3.0/settings.ini << EOF
+[Settings]
+gtk-application-prefer-dark-theme=1
+gtk-theme-name=Adwaita-dark
+gtk-icon-theme-name=Adwaita
+gtk-font-name=JetBrains Mono 11
+gtk-cursor-theme-name=Bibata-Modern-Classic
+gtk-cursor-theme-size=24
+gtk-toolbar-style=GTK_TOOLBAR_BOTH_HORIZ
+gtk-toolbar-icon-size=GTK_ICON_SIZE_LARGE_TOOLBAR
+gtk-button-images=1
+gtk-menu-images=1
+gtk-enable-event-sounds=1
+gtk-enable-input-feedback-sounds=0
+gtk-xft-antialias=1
+gtk-xft-hinting=1
+gtk-xft-hintstyle=hintfull
+gtk-xft-rgba=rgb
+EOF
+
+# Create GTK-4 config
+echo "[*] Creating GTK-4 configuration..."
+mkdir -p ~/.config/gtk-4.0
+cat > ~/.config/gtk-4.0/settings.ini << EOF
+[Settings]
+gtk-application-prefer-dark-theme=1
+gtk-theme-name=Adwaita-dark
+gtk-icon-theme-name=Adwaita
+gtk-font-name=JetBrains Mono 11
+gtk-cursor-theme-name=Bibata-Modern-Classic
+gtk-cursor-theme-size=24
+EOF
+
+# Create Nautilus dark theme wrapper
+echo "[*] Creating Nautilus dark theme wrapper..."
+cat > ~/.local/bin/nautilus-dark << 'EOF'
+#!/bin/bash
+# Nautilus Dark Theme Wrapper
+
+# Set environment variables for this session
+export GTK_THEME="Adwaita-dark"
+export GTK2_RC_FILES="/usr/share/themes/Adwaita-dark/gtk-2.0/gtkrc"
+
+# Launch Nautilus with dark theme
+exec /usr/bin/nautilus "$@"
+EOF
+
+chmod +x ~/.local/bin/nautilus-dark
+
+echo "[✓] Dark theme configuration applied!"
+
 # ─── Enable GDM & Set Hyprland as Default ─────────────────────────────
 if [ "$DISTRO" != "nixos" ]; then
     echo "[*] Configuring display manager..."
