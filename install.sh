@@ -10,7 +10,7 @@ TMP_DIR="$(mktemp -d)"
 BACKUP_DIR="$HOME/.dotfiles_backup_$(date +%Y%m%d_%H%M%S)"
 
 WAYPAPER_CFG="$HOME/.config/waypaper/config.json"
-HYPAPER_CONF="$HOME/.config/hypr/hyprpaper.conf"
+HYPAPER_CONF="$HOME/.config/hyprpaper/hyprpaper.conf"
 HYPR_CONF="$HOME/.config/hypr/hyprland.conf"
 
 # ────────────────────────────────
