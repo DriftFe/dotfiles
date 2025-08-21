@@ -1,50 +1,25 @@
 #!/usr/bin/env bash
-# Sync current Waypaper wallpapers into Hyprpaper config
+# Sync Waypaper wallpaper into Hyprpaper using hyprctl
 
-WAYPAPER_CFG="$HOME/.config/waypaper/config.json"
-HYPAPER_CONF="$HOME/.config/hyprpaper/hyprpaper.conf"
+WAYPAPER_INI="$HOME/.config/waypaper/config.ini"
 
-mkdir -p "$(dirname "$HYPAPER_CONF")"
-
-if [ ! -f "$WAYPAPER_CFG" ]; then
-    echo "[!] Waypaper config not found at $WAYPAPER_CFG"
+if [ ! -f "$WAYPAPER_INI" ]; then
+    echo "[!] Waypaper INI config not found at $WAYPAPER_INI"
     exit 1
 fi
 
-# Extract wallpapers (Waypaper stores them as JSON values)
-WALLPAPERS=$(grep -oP '"wallpaper":\s*\{[^}]+\}' "$WAYPAPER_CFG" || true)
+# Extract wallpaper path
+WP_FILE=$(grep -E '^wallpaper *= *' "$WAYPAPER_INI" | sed -E 's/^wallpaper *= *//')
+WP_FILE=$(eval echo "$WP_FILE")
 
-if [ -n "$WALLPAPERS" ]; then
-    # ────────────────────────────────
-    # Case 1: per-monitor wallpapers
-    # ────────────────────────────────
-    > "$HYPAPER_CONF"
-    echo "# Auto-generated from Waypaper" >> "$HYPAPER_CONF"
-    echo "splash = true" >> "$HYPAPER_CONF"
-
-    # Extract monitor→wallpaper pairs
-    echo "$WALLPAPERS" | grep -oP '"[^"]+":\s*"[^"]+"' | while read -r line; do
-        MONITOR=$(echo "$line" | cut -d: -f1 | tr -d '" ')
-        FILE=$(echo "$line" | cut -d: -f2- | tr -d '" ')
-        echo "preload = $FILE" >> "$HYPAPER_CONF"
-        echo "wallpaper = $MONITOR,$FILE" >> "$HYPAPER_CONF"
-    done
-else
-    # ────────────────────────────────
-    # Case 2: single wallpaper (global)
-    # ────────────────────────────────
-    WP_FILE=$(grep -oP '"wallpaper":\s*"\K[^"]+' "$WAYPAPER_CFG" | head -n1 || true)
-    if [ -n "$WP_FILE" ]; then
-        cat > "$HYPAPER_CONF" <<EOF
-# Auto-generated from Waypaper
-preload = $WP_FILE
-wallpaper = ,$WP_FILE
-splash = true
-EOF
-    fi
+if [ ! -f "$WP_FILE" ]; then
+    echo "[!] Wallpaper file not found: $WP_FILE"
+    exit 1
 fi
 
-# Restart hyprpaper to apply changes
-pkill hyprpaper 2>/dev/null
-sleep 0.2
-hyprpaper &
+# Get first monitor name
+MONITOR=$(hyprctl monitors -j | jq -r '.[0].name')
+
+# Apply wallpaper directly
+hyprctl hyprpaper preload "$WP_FILE"
+hyprctl hyprpaper wallpaper "$MONITOR,$WP_FILE"
