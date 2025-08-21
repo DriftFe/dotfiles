@@ -1,286 +1,203 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
 
-REPO_URL="https://github.com/DriftFe/dotfiles"
-SCRIPT_NAME="Lavender Dotfiles Installer"
+set -euo pipefail
 
-# ─── Zenity Environment Check ─────────────────────────────
-USE_GUI=false
-if command -v zenity &>/dev/null && { [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; }; then
-    USE_GUI=true
-else
-    echo "[*] No GUI detected or Zenity not installed. Falling back to terminal mode."
-fi
+# ────────────────────────────────
+# Globals
+# ────────────────────────────────
+DOTFILES_REPO="https://github.com/DriftFe/dotfiles"
+TMP_DIR="$(mktemp -d)"
+BACKUP_DIR="$HOME/.dotfiles_backup_$(date +%Y%m%d_%H%M%S)"
 
-# ─── Helper Functions ─────────────────────────────
-show_message() {
-    local title="$1"
-    local message="$2"
-    local type="${3:-info}"  # info, error, warning
-    
-    if $USE_GUI; then
-        case "$type" in
-            "error")   zenity --error --title="$title" --text="$message" ;;
-            "warning") zenity --warning --title="$title" --text="$message" ;;
-            *)         zenity --info --title="$title" --text="$message" ;;
-        esac
-    else
-        echo "[$type] $message"
-    fi
-}
+WAYPAPER_CFG="$HOME/.config/waypaper/config.json"
+HYPAPER_CONF="$HOME/.config/hypr/hyprpaper.conf"
+HYPR_CONF="$HOME/.config/hypr/hyprland.conf"
 
-ask_question() {
-    local message="$1"
-    local title="${2:-$SCRIPT_NAME}"
-    
-    if $USE_GUI; then
-        zenity --question --title="$title" --text="$message"
-        return $?
-    else
-        echo "[?] $message"
-        read -p "Proceed? (y/n): " confirm
-        [[ "$confirm" =~ ^[Yy]$ ]] && return 0 || return 1
-    fi
-}
+# ────────────────────────────────
+# Utils
+# ────────────────────────────────
+msg() { echo -e "\e[1;32m[*]\e[0m $*"; }
+warn() { echo -e "\e[1;33m[!]\e[0m $*"; }
+err() { echo -e "\e[1;31m[✗]\e[0m $*" >&2; }
 
-# ─── Error Handler ─────────────────────────────
-cleanup_and_exit() {
-    local exit_code=$1
-    [ -d "$TMP_DIR" ] && rm -rf "$TMP_DIR"
-    exit $exit_code
-}
+# ────────────────────────────────
+# Checks
+# ────────────────────────────────
+msg "Checking requirements..."
+command -v git >/dev/null || { err "git missing"; exit 1; }
+command -v rsync >/dev/null || { err "rsync missing"; exit 1; }
 
-trap 'cleanup_and_exit 1' ERR
-trap 'cleanup_and_exit 0' INT TERM
-
-# ─── Pre-flight Checks ─────────────────────────────
-if ! command -v git &>/dev/null; then
-    show_message "$SCRIPT_NAME" "Git is not installed. Please install git first." "error"
-    exit 1
-fi
-
-if ! command -v rsync &>/dev/null; then
-    show_message "$SCRIPT_NAME" "rsync is not installed. Please install rsync first." "error"
-    exit 1
-fi
-
-# ─── Detect Distro ─────────────────────────────
+# ────────────────────────────────
+# Detect distro
+# ────────────────────────────────
 if [ -f /etc/os-release ]; then
     . /etc/os-release
-    case "$ID" in
-        arch|manjaro|endeavouros|artix|cachyos) DISTRO="arch" ;;
-        fedora|rhel|centos|rocky|almalinux)     DISTRO="fedora" ;;
-        gentoo|funtoo)                         DISTRO="gentoo" ;;
-        nixos)                                 DISTRO="nixos" ;;
-        opensuse*|sles)                        DISTRO="opensuse" ;;
-        void)                                  DISTRO="void" ;;
-        debian|ubuntu|pop|linuxmint|elementary|zorin|deepin)
-            show_message "$SCRIPT_NAME" "This installer does NOT support Debian-based distros.\nPlease use Arch, Fedora, Gentoo, or NixOS instead." "error"
-            exit 1
-            ;;
-        *)
-            show_message "$SCRIPT_NAME" "Unsupported distribution: $ID\nSupported: Arch, Fedora, Gentoo, NixOS, openSUSE, Void" "warning"
-            if ! ask_question "Continue anyway? (Package installation may fail)"; then
-                exit 1
-            fi
-            DISTRO="$ID"
-            ;;
-    esac
+    DISTRO=$ID
 else
-    show_message "$SCRIPT_NAME" "Could not detect your Linux distribution." "error"
-    exit 1
+    DISTRO="unknown"
 fi
 
-echo "[*] Detected distribution: $DISTRO"
+msg "Detected distro: $DISTRO"
 
-# ─── Confirm Install ─────────────────────────────
-if ! ask_question "This will install Hyprland, Dependencies, and Lavender dotfiles. Continue?" "Install Lavender Dotfiles"; then
-    show_message "$SCRIPT_NAME" "Installation cancelled."
-    exit 0
-fi
+# ────────────────────────────────
+# Install packages
+# ────────────────────────────────
+msg "Installing dependencies..."
 
-# ─── Backup Existing Configs ─────────────────────────────
-BACKUP_NEEDED=false
-BACKUP_CONFIGS=()
+case "$DISTRO" in
+    arch|endeavouros|manjaro)
+        sudo pacman -Syu --needed --noconfirm \
+            hyprland waybar wofi kitty \
+            hyprpaper hyprlock gdm nautilus
+        ;;
+    fedora)
+        sudo dnf install -y \
+            hyprland waybar wofi kitty \
+            hyprpaper hyprlock gdm nautilus
+        ;;
+    void)
+        sudo xbps-install -Sy \
+            hyprland waybar wofi kitty \
+            hyprpaper hyprlock gdm nautilus
+        ;;
+    opensuse*|tumbleweed)
+        sudo zypper install -y \
+            hyprland waybar wofi kitty \
+            hyprpaper hyprlock gdm nautilus
+        ;;
+    nixos)
+        warn "On NixOS, add these packages manually via configuration.nix"
+        ;;
+    *)
+        warn "Unsupported distro, please install dependencies manually."
+        ;;
+esac
 
-for config in waybar kitty wofi hypr hyprpaper; do
-    if [ -d "$HOME/.config/$config" ]; then
-        BACKUP_NEEDED=true
-        BACKUP_CONFIGS+=("$config")
+# ────────────────────────────────
+# Backup old configs
+# ────────────────────────────────
+msg "Backing up old configs..."
+mkdir -p "$BACKUP_DIR"
+for item in .zshrc .config/hypr .config/waybar .config/kitty .config/wofi; do
+    if [ -e "$HOME/$item" ]; then
+        rsync -a "$HOME/$item" "$BACKUP_DIR/"
+        rm -rf "$HOME/$item"
     fi
 done
 
-if [ -f "$HOME/.zshrc" ]; then
-    BACKUP_NEEDED=true
-    BACKUP_CONFIGS+=(".zshrc")
-fi
+# ────────────────────────────────
+# Clone dotfiles
+# ────────────────────────────────
+msg "Cloning dotfiles..."
+git clone --depth=1 "$DOTFILES_REPO" "$TMP_DIR"
 
-if $BACKUP_NEEDED; then
-    BACKUP_DIR="$HOME/.config_backup_$(date +%Y%m%d_%H%M%S)"
-    if ask_question "Existing configs detected: ${BACKUP_CONFIGS[*]}\nCreate backup in $BACKUP_DIR?"; then
-        echo "[*] Creating backup..."
-        mkdir -p "$BACKUP_DIR"
-        for config in "${BACKUP_CONFIGS[@]}"; do
-            if [ "$config" = ".zshrc" ]; then
-                [ -f "$HOME/.zshrc" ] && cp "$HOME/.zshrc" "$BACKUP_DIR/"
-            else
-                [ -d "$HOME/.config/$config" ] && cp -r "$HOME/.config/$config" "$BACKUP_DIR/"
-            fi
-        done
-        echo "[*] Backup created at: $BACKUP_DIR"
-    fi
-fi
+# Apply dotfiles
+msg "Applying dotfiles..."
+rsync -av "$TMP_DIR/dot_config/" "$HOME/.config/"
 
-# ─── Install Packages ─────────────────────────────
-CORE_PACKAGES="hyprland kitty nautilus wofi gdm waybar hyprpaper hyprlock"
-AUR_PACKAGES="cava cbonsai wofi-emoji starship touchegg oh-my-zsh-git zsh-theme-powerlevel10k-git grimblast swappy gpu-screen-recorder vesktop visual-studio-code-bin spotify zen-browser-bin goonsh"
+# Ensure scripts are executable
+chmod -R +x "$HOME/.config/hypr/scripts" 2>/dev/null || true
 
-echo "[*] Installing core packages..."
+# Setup zsh
+[ -f "$TMP_DIR/.zshrc" ] && cp "$TMP_DIR/.zshrc" "$HOME/"
 
-case "$DISTRO" in
-    "arch")
-        sudo pacman -Syu --noconfirm
-        sudo pacman -S --needed --noconfirm $CORE_PACKAGES
-        if command -v yay &>/dev/null; then
-            yay -S --needed --noconfirm $AUR_PACKAGES || echo "[!] Some AUR packages failed to install"
-        elif command -v paru &>/dev/null; then
-            paru -S --needed --noconfirm $AUR_PACKAGES || echo "[!] Some AUR packages failed to install"
-        else
-            echo "[!] No AUR helper found. Install yay or paru for additional packages."
-        fi
-        ;;
-    "fedora")   sudo dnf install -y $CORE_PACKAGES || echo "[!] Some packages may not be available in Fedora repos" ;;
-    "gentoo")   sudo emerge --ask --update --deep --newuse @world
-                sudo emerge --ask gui-wm/hyprland x11-terms/kitty gui-apps/wofi gnome-base/gdm x11-misc/waybar || echo "[!] Some packages may not be available" ;;
-    "nixos")    show_message "$SCRIPT_NAME" "On NixOS, please add Hyprland and related packages to your configuration.nix\nThen run: sudo nixos-rebuild switch" "warning" ;;
-    "opensuse") sudo zypper install -y $CORE_PACKAGES || echo "[!] Some packages may not be available" ;;
-    "void")     sudo xbps-install -Sy $CORE_PACKAGES || echo "[!] Some packages may not be available" ;;
-    *)          show_message "$SCRIPT_NAME" "Package installation not implemented for: $DISTRO\nPlease manually install: $CORE_PACKAGES" "warning" ;;
-esac
-
-# ─── Clone and Apply Dotfiles ─────────────────────────────
-echo "[*] Downloading Lavender Dotfiles..."
-TMP_DIR=$(mktemp -d)
-
-if ! git clone --depth=1 "$REPO_URL" "$TMP_DIR"; then
-    show_message "$SCRIPT_NAME" "Failed to clone repository. Check your internet connection." "error"
-    cleanup_and_exit 1
-fi
-
-if [ ! -d "$TMP_DIR/dot_config" ]; then
-    show_message "$SCRIPT_NAME" "Repository structure is unexpected. 'dot_config' directory not found." "error"
-    cleanup_and_exit 1
-fi
-
-echo "[*] Applying Lavender Dotfiles..."
-mkdir -p ~/.config
-rsync -av "$TMP_DIR/dot_config/" ~/.config/ || {
-    show_message "$SCRIPT_NAME" "Failed to copy configuration files." "error"
-    cleanup_and_exit 1
-}
-
-# ─── Copy Wallpapers ─────────────────────────────
+# ────────────────────────────────
+# Wallpapers
+# ────────────────────────────────
 if [ -d "$TMP_DIR/dot_config/wallpapers" ]; then
-    echo "[*] Copying wallpapers to ~/.wallpapers..."
-    mkdir -p ~/.wallpapers
-    rsync -av "$TMP_DIR/dot_config/wallpapers/" ~/.wallpapers/ || echo "[!] Failed to copy wallpapers"
+    msg "Copying wallpapers..."
+    mkdir -p "$HOME/.wallpapers"
+    rsync -av "$TMP_DIR/dot_config/wallpapers/" "$HOME/.wallpapers/"
 else
-    echo "[!] No wallpapers directory found in dotfiles."
+    warn "No wallpapers found in dotfiles."
 fi
 
-# ─── Force Dark Theme ─────────────────────────────
-echo "[*] Applying dark theme via gsettings..."
+# ────────────────────────────────
+# Force dark theme
+# ────────────────────────────────
+msg "Applying dark theme..."
 gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' 2>/dev/null || true
 gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark' 2>/dev/null || true
 
-# ─── Make Scripts Executable ─────────────────────────────
-echo "[*] Setting executable permissions for scripts..."
-find ~/.config -name "*.sh" -type f -exec chmod +x {} \; 2>/dev/null || true
-find ~/.config -name "*.py" -type f -exec chmod +x {} \; 2>/dev/null || true
-
-SCRIPT_DIRS=(
-    "$HOME/.config/hypr/scripts"
-    "$HOME/.config/waybar/scripts"
-    "$HOME/.config/wofi/scripts"
-    "$HOME/.local/bin"
-)
-for dir in "${SCRIPT_DIRS[@]}"; do
-    [ -d "$dir" ] && find "$dir" -type f -exec chmod +x {} \; 2>/dev/null || true
-done
-
-# ─── Handle Special Files ─────────────────────────────
-[ -f "$TMP_DIR/dot_config/.zshrc" ] && cp "$TMP_DIR/dot_config/.zshrc" ~/.zshrc || true
-if [ -d "$TMP_DIR/dot_config/.oh-my-zsh" ]; then
-    mkdir -p ~/.oh-my-zsh
-    rsync -av "$TMP_DIR/dot_config/.oh-my-zsh/" ~/.oh-my-zsh/ || true
-    find ~/.oh-my-zsh -name "*.sh" -type f -exec chmod +x {} \; 2>/dev/null || true
-fi
-
-mkdir -p ~/.local/bin
-if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-fi
-
-# ─── Configure Dark Theme GTK ─────────────────────────────
+# ────────────────────────────────
+# GTK theme setup
+# ────────────────────────────────
+msg "Configuring GTK theme..."
 mkdir -p ~/.config/gtk-3.0 ~/.config/gtk-4.0
+
 cat > ~/.config/gtk-3.0/settings.ini <<EOF
 [Settings]
 gtk-application-prefer-dark-theme=1
 gtk-theme-name=Adwaita-dark
-gtk-icon-theme-name=Adwaita
-gtk-font-name=JetBrains Mono 11
+gtk-icon-theme-name=Papirus-Dark
+gtk-font-name=JetBrainsMono Nerd Font 11
 gtk-cursor-theme-name=Bibata-Modern-Classic
-gtk-cursor-theme-size=24
 EOF
 
-cat > ~/.config/gtk-4.0/settings.ini <<EOF
-[Settings]
-gtk-theme-name=Adwaita-dark
-gtk-icon-theme-name=Adwaita
-gtk-font-name=JetBrains Mono 11
-gtk-cursor-theme-name=Bibata-Modern-Classic
-gtk-cursor-theme-size=24
-gtk-enable-animations=true
-EOF
+cp ~/.config/gtk-3.0/settings.ini ~/.config/gtk-4.0/
 
-cat > ~/.local/bin/nautilus-dark <<'EOF'
-#!/bin/bash
-export GTK_THEME="Adwaita-dark"
-export GTK2_RC_FILES="/usr/share/themes/Adwaita-dark/gtk-2.0/gtkrc"
-exec /usr/bin/nautilus "$@"
-EOF
-chmod +x ~/.local/bin/nautilus-dark
+# ────────────────────────────────
+# Hyprpaper config sync
+# ────────────────────────────────
+msg "Setting up hyprpaper config..."
 
-# ─── Enable GDM & Hyprland ─────────────────────────────
-if [ "$DISTRO" != "nixos" ]; then
-    if systemctl list-unit-files | grep -q "gdm.service"; then
-        sudo systemctl enable gdm || true
+if [ -f "$WAYPAPER_CFG" ]; then
+    WP_FILE=$(grep -oP '"wallpaper":\s*"\K[^"]+' "$WAYPAPER_CFG" | head -n1 || true)
+    if [ -n "$WP_FILE" ]; then
+        msg "Found wallpaper in Waypaper: $WP_FILE"
+        mkdir -p "$(dirname "$HYPAPER_CONF")"
+        cat > "$HYPAPER_CONF" <<EOF
+# Auto-generated by Lavender installer
+preload = $WP_FILE
+wallpaper = ,$WP_FILE
+splash = true
+EOF
+    else
+        warn "No wallpaper entry found in Waypaper config."
     fi
-    HYPRLAND_SESSION="/usr/share/wayland-sessions/hyprland.desktop"
-    if [ ! -f "$HYPRLAND_SESSION" ]; then
-        sudo mkdir -p /usr/share/wayland-sessions
-        sudo tee "$HYPRLAND_SESSION" >/dev/null <<EOF
+else
+    warn "Waypaper config not found, skipping hyprpaper sync."
+fi
+
+# ────────────────────────────────
+# Auto-start hyprpaper in Hyprland
+# ────────────────────────────────
+if [ -f "$HYPR_CONF" ]; then
+    if ! grep -q "exec-once.*hyprpaper" "$HYPR_CONF"; then
+        msg "Adding hyprpaper to Hyprland autostart..."
+        echo -e "\n# Auto-start hyprpaper\nexec-once = hyprpaper &" >> "$HYPR_CONF"
+    else
+        msg "Hyprpaper already in autostart, skipping..."
+    fi
+else
+    warn "Hyprland config not found, cannot auto-add hyprpaper."
+fi
+
+# ────────────────────────────────
+# Enable GDM + Hyprland session
+# ────────────────────────────────
+if command -v systemctl >/dev/null; then
+    sudo systemctl enable gdm || true
+    sudo systemctl set-default graphical.target || true
+fi
+
+# Create Hyprland session file if missing
+if [ ! -f /usr/share/wayland-sessions/hyprland.desktop ]; then
+    sudo tee /usr/share/wayland-sessions/hyprland.desktop >/dev/null <<EOF
 [Desktop Entry]
 Name=Hyprland
-Comment=A dynamic tiling Wayland compositor
+Comment=An independent tiling Wayland compositor
 Exec=Hyprland
 Type=Application
-DesktopNames=Hyprland
 EOF
-    fi
-    sudo mkdir -p /var/lib/AccountsService/users
-    echo -e "[User]\nSession=hyprland\nXSession=\nSystemAccount=false" | sudo tee "/var/lib/AccountsService/users/$USER" >/dev/null
-else
-    echo "[*] On NixOS, configure your display manager in configuration.nix"
 fi
 
-# ─── Done ─────────────────────────────
-cleanup_and_exit 0
+# ────────────────────────────────
+# Finish
+# ────────────────────────────────
+msg "Cleaning up..."
+rm -rf "$TMP_DIR"
 
-show_message "$SCRIPT_NAME" "Installation completed successfully!"
-if ask_question "Installation complete. Reboot now to start using Hyprland?" "Install Complete"; then
-    sudo reboot
-else
-    echo "[*] Please reboot your system to start using Hyprland."
-fi
+msg "Installation complete! 🎉"
+echo "Backups saved in: $BACKUP_DIR"
+echo "You can reboot now to start Hyprland."
