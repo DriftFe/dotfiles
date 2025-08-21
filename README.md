@@ -79,7 +79,7 @@ chmod +x install.sh
 
 ## Customization
 
-### **Wallpapers** (as of now, you have to replace the current wallpaper, because its hard-coded to only load wallpaper.jpg)
+### **Wallpapers** (as of now, you have to replace the current wallpaper, because its hard-coded to only load wallpaper.png)
 Place custom wallpapers in `~/.wallpapers/` and update
 
 ### **Keybindings**
