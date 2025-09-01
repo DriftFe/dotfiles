@@ -45,7 +45,7 @@ msg "Detected distro: $DISTRO"
 msg "Installing dependencies..."
 
 case "$DISTRO" in
-    arch|endeavouros|manjaro)
+    arch|endeavouros|manjaro|cachyos)
         sudo pacman -Syu --needed --noconfirm \
             hyprland waybar wofi kitty \
             hyprpaper hyprlock gdm nautilus
