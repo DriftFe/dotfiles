@@ -130,6 +130,7 @@ The installer automatically handles most dependencies, but ensure you have:
 **No Permission:**
 ```bash
 chmod +x [script].sh
+```
 
 **Hyprland won't start:**
 ```bash
@@ -160,9 +161,5 @@ waybar &
 # Manually sync configurations
 rsync -av dot_config/ ~/.config/
 ```
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ty for reading, ur amazing :3
