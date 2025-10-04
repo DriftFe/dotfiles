@@ -53,7 +53,7 @@ fi
 # Core repo packages
 PAC_PKGS=(
   hyprland hyprpaper hyprland-qtutils
-  waybar wofi mako kitty
+  waybar wofi mako kitty gdm
   cliphist wl-clipboard network-manager-applet touchegg
   rsync wget curl unzip
   noto-fonts noto-fonts-emoji ttf-font-awesome
