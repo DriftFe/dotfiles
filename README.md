@@ -1,6 +1,6 @@
 # Lavender Dotfiles
 
-An extremely minimal lavender themed hyprland setup with cool applications. Automated installation and management for Arch, Fedora, Gentoo, and NixOS.
+An extremely minimal lavender themed hyprland setup with cool applications. Automated installation and management for Arch Linux.
 
 ## Stuff Included
 
@@ -47,18 +47,6 @@ cd dotfiles
 chmod +x install.sh
 ./install.sh
 ```
-
-## Supported Distributions
-
-### ✅ **Fully Supported**
-- **Arch Linux** (and sub-distros: Manjaro, EndeavourOS)
-- **Fedora** (and sub-distros: RHEL, CentOS)
-- **Gentoo**
-- **NixOS**
-
-### ❌ **Not Supported**
-- Debian-based distributions (Ubuntu, Pop!_OS, Linux Mint)
-  - *Use Arch, Fedora, Gentoo, or NixOS instead*
 
 ## Management Scripts
 
