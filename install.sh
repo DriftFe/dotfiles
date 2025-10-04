@@ -6,7 +6,6 @@ IFS=$'\n\t'
 # ║           Lavender Dotfiles >~< Installer                     ║
 # ║        Automated Hyprland Setup for Arch Linux                ║
 # ╚═══════════════════════════════════════════════════════════════╝
-#
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 SRC_DOTCONFIG="$script_dir/dot_config"
@@ -344,6 +343,95 @@ chmod_scripts() {
   fi
   
   success "Made $script_count scripts executable"
+}
+
+setup_oh_my_zsh() {
+  echo
+  log "Setting up Oh My Zsh and Powerlevel10k"
+  local target_user="${SUDO_USER:-$USER}"
+  local user_home
+  
+  # Determine the actual user's home directory
+  if [[ -n "${SUDO_USER:-}" ]]; then
+    user_home=$(eval echo ~"$SUDO_USER")
+  else
+    user_home="$HOME"
+  fi
+  
+  # Install Oh My Zsh
+  if [[ ! -d "$user_home/.oh-my-zsh" ]]; then
+    log "Installing Oh My Zsh..."
+    if [[ -n "${SUDO_USER:-}" && "$EUID" -eq 0 ]]; then
+      sudo -u "$target_user" sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    else
+      sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    fi
+    success "Oh My Zsh installed"
+  else
+    info "Oh My Zsh already installed, skipping..."
+  fi
+  
+  # Install Powerlevel10k theme
+  if [[ ! -d "$user_home/.oh-my-zsh/custom/themes/powerlevel10k" ]]; then
+    log "Installing Powerlevel10k theme..."
+    if [[ -n "${SUDO_USER:-}" && "$EUID" -eq 0 ]]; then
+      sudo -u "$target_user" git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$user_home/.oh-my-zsh/custom/themes/powerlevel10k"
+    else
+      git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$user_home/.oh-my-zsh/custom/themes/powerlevel10k"
+    fi
+    success "Powerlevel10k installed"
+  else
+    info "Powerlevel10k already installed, skipping..."
+  fi
+  
+  # Install popular Oh My Zsh plugins
+  log "Installing Oh My Zsh plugins..."
+  
+  # zsh-autosuggestions
+  if [[ ! -d "$user_home/.oh-my-zsh/custom/plugins/zsh-autosuggestions" ]]; then
+    if [[ -n "${SUDO_USER:-}" && "$EUID" -eq 0 ]]; then
+      sudo -u "$target_user" git clone https://github.com/zsh-users/zsh-autosuggestions "$user_home/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+    else
+      git clone https://github.com/zsh-users/zsh-autosuggestions "$user_home/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+    fi
+  fi
+  
+  # zsh-syntax-highlighting
+  if [[ ! -d "$user_home/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting" ]]; then
+    if [[ -n "${SUDO_USER:-}" && "$EUID" -eq 0 ]]; then
+      sudo -u "$target_user" git clone https://github.com/zsh-users/zsh-syntax-highlighting "$user_home/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
+    else
+      git clone https://github.com/zsh-users/zsh-syntax-highlighting "$user_home/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
+    fi
+  fi
+  
+  # zsh-completions
+  if [[ ! -d "$user_home/.oh-my-zsh/custom/plugins/zsh-completions" ]]; then
+    if [[ -n "${SUDO_USER:-}" && "$EUID" -eq 0 ]]; then
+      sudo -u "$target_user" git clone https://github.com/zsh-users/zsh-completions "$user_home/.oh-my-zsh/custom/plugins/zsh-completions"
+    else
+      git clone https://github.com/zsh-users/zsh-completions "$user_home/.oh-my-zsh/custom/plugins/zsh-completions"
+    fi
+  fi
+  
+  success "Oh My Zsh plugins installed (autosuggestions, syntax-highlighting, completions)"
+  
+  # Set zsh as default shell
+  if [[ "$SHELL" != "$(which zsh)" ]]; then
+    log "Setting zsh as default shell for $target_user"
+    if command -v sudo >/dev/null 2>&1; then
+      sudo chsh -s "$(which zsh)" "$target_user" 2>/dev/null || warn "Could not change default shell. Run 'chsh -s \$(which zsh)' manually."
+    else
+      chsh -s "$(which zsh)" "$target_user" 2>/dev/null || warn "Could not change default shell. Run 'chsh -s \$(which zsh)' manually."
+    fi
+    success "Default shell set to zsh"
+  fi
+  
+  # Fix ownership
+  if [[ -n "${SUDO_USER:-}" && "$EUID" -eq 0 ]]; then
+    chown -R "$target_user:$target_user" "$user_home/.oh-my-zsh" 2>/dev/null || true
+    chown "$target_user:$target_user" "$user_home/.zshrc" 2>/dev/null || true
+  fi
 }
 
 ensure_user_in_group() {
