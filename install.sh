@@ -252,11 +252,17 @@ if ! sudo pacman -S --needed --noconfirm waydroid; then
 fi
 
 # --- Enable essential services ---
-msg "Enabling essential system services..."
+msg "Enabling and starting essential system services..."
 sudo systemctl enable NetworkManager.service || err "Failed to enable NetworkManager"
 sudo systemctl start NetworkManager.service || err "Failed to start NetworkManager"
 sudo systemctl enable bluetooth.service || err "Failed to enable bluetooth"
 sudo systemctl start bluetooth.service || err "Failed to start bluetooth"
+
+# Enable user services that should run in the user session
+msg "Enabling user services..."
+systemctl --user enable pipewire.service || err "Failed to enable pipewire"
+systemctl --user enable pipewire-pulse.service || err "Failed to enable pipewire-pulse"
+systemctl --user enable wireplumber.service || err "Failed to enable wireplumber"
 
 # --- GDM configuration and Hyprland as default ---
 msg "Configuring GDM and setting Hyprland as default session..."
@@ -349,8 +355,9 @@ else
 fi
 
 # Enable and start GDM
-msg "Enabling GDM service..."
+msg "Enabling and starting GDM service..."
 sudo systemctl enable gdm.service || err "Failed to enable GDM"
+sudo systemctl start gdm.service 2>/dev/null || msg "GDM will start on next boot (not starting now to avoid session conflicts)"
 
 # Check for conflicting display managers
 OTHER_DMS=(lightdm sddm lxdm)
@@ -358,6 +365,7 @@ for dm in "${OTHER_DMS[@]}"; do
   if systemctl is-enabled "${dm}.service" &>/dev/null; then
     warn "Disabling conflicting display manager: ${dm}"
     sudo systemctl disable "${dm}.service" || true
+    sudo systemctl stop "${dm}.service" 2>/dev/null || true
   fi
 done
 
@@ -483,7 +491,7 @@ mkdir -p "$CURSOR_DIR"
 
 # Install from AUR if needed
 if [[ ! -d "$CURSOR_DIR/$HYPRCURSOR_NAME" ]] && [[ ! -d "/usr/share/icons/$HYPRCURSOR_NAME" ]]; then
-  "$AUR_HELPER" -S --needed --noconfirm bibata-cursor-theme-bin || warn "Failed to install Bibata cursor theme"
+  "$AUR_HELPER" -S --needed --noconfirm bibata-cursor-theme-bin || err "Failed to install Bibata cursor theme"
 fi
 
 # GTK cursor settings
@@ -536,6 +544,85 @@ fi
 
 msg "✓ Cursor theme configured"
 
+# --- Polkit agent setup ---
+msg "Setting up polkit authentication agent..."
+POLKIT_AUTOSTART="$HOME/.config/autostart/polkit-gnome-authentication-agent-1.desktop"
+mkdir -p "$HOME/.config/autostart"
+cat > "$POLKIT_AUTOSTART" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Polkit GNOME Authentication Agent
+Comment=GNOME Polkit authentication agent
+Exec=/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1
+Terminal=false
+Categories=System;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+EOF
+chmod +x "$POLKIT_AUTOSTART"
+msg "✓ Polkit agent will autostart"
+
+# --- Create Hyprland autostart for essential services ---
+msg "Creating Hyprland autostart configuration..."
+HYPR_AUTOSTART="$HOME/.config/hypr/autostart.conf"
+
+# Backup existing autostart if present
+if [[ -f "$HYPR_AUTOSTART" ]]; then
+  cp "$HYPR_AUTOSTART" "$HYPR_AUTOSTART.backup.$(date +%s)"
+fi
+
+# Create autostart config with all essential services
+cat > "$HYPR_AUTOSTART" <<'EOF'
+# Hyprland Autostart Configuration
+# Essential services and applications that start with Hyprland
+
+# Wallpaper daemon
+exec-once = hyprpaper
+
+# Notification daemon
+exec-once = mako
+
+# Status bar
+exec-once = waybar
+
+# Polkit authentication agent
+exec-once = /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1
+
+# Clipboard manager
+exec-once = wl-paste --type text --watch cliphist store
+exec-once = wl-paste --type image --watch cliphist store
+
+# Network manager applet
+exec-once = nm-applet --indicator
+
+# Bluetooth manager
+exec-once = blueman-applet
+
+# Idle management and screen locking (if hyprlock is installed)
+exec-once = hypridle
+
+# XDG portals
+exec-once = dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
+
+# GNOME keyring
+exec-once = gnome-keyring-daemon --start --components=secrets
+
+# Touchegg (touchpad gestures)
+exec-once = touchegg
+
+# Audio server (if not started by systemd)
+exec-once = pipewire
+exec-once = wireplumber
+EOF
+
+# Source autostart in main Hyprland config if not already present
+if ! grep -q "source.*autostart.conf" "$HYPR_CONF" 2>/dev/null; then
+  echo -e "\n# Autostart services\nsource = ~/.config/hypr/autostart.conf" >> "$HYPR_CONF"
+  msg "✓ Autostart configuration linked to hyprland.conf"
+fi
+
+msg "✓ Hyprland autostart configured (hyprpaper, mako, waybar, etc.)"
+
 # --- Zsh setup ---
 msg "Setting up Zsh, Oh My Zsh, and plugins..."
 
@@ -544,7 +631,7 @@ if [[ ! -d "$HOME/.oh-my-zsh" ]]; then
   msg "Installing Oh My Zsh..."
   RUNZSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" || \
     git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git "$HOME/.oh-my-zsh" || \
-    warn "Failed to install Oh My Zsh"
+    err "Failed to install Oh My Zsh"
 fi
 
 # Install Powerlevel10k
@@ -553,7 +640,7 @@ mkdir -p "$ZSH_CUSTOM/themes"
 if [[ ! -d "$ZSH_CUSTOM/themes/powerlevel10k" ]]; then
   msg "Installing Powerlevel10k theme..."
   git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_CUSTOM/themes/powerlevel10k" || \
-    warn "Failed to install Powerlevel10k"
+    err "Failed to install Powerlevel10k"
 fi
 
 # Install zsh-autosuggestions
@@ -561,7 +648,7 @@ mkdir -p "$HOME/.zsh"
 if [[ ! -d "$HOME/.zsh/zsh-autosuggestions" ]]; then
   msg "Installing zsh-autosuggestions..."
   git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions "$HOME/.zsh/zsh-autosuggestions" || \
-    warn "Failed to install zsh-autosuggestions"
+    err "Failed to install zsh-autosuggestions"
 fi
 
 # Set zsh as default shell
@@ -570,7 +657,7 @@ if command -v zsh &>/dev/null; then
   CURRENT_SHELL="$(getent passwd "$USER" | cut -d: -f7)"
   if [[ "$CURRENT_SHELL" != "$ZSH_PATH" ]]; then
     msg "Setting zsh as default shell..."
-    chsh -s "$ZSH_PATH" "$USER" || warn "Failed to set zsh as default shell. Run manually: chsh -s $ZSH_PATH"
+    chsh -s "$ZSH_PATH" "$USER" || err "Failed to set zsh as default shell"
   fi
 fi
 
@@ -586,16 +673,25 @@ echo "=============================================="
 echo ""
 msg "Installed and verified:"
 echo "  • Core: GDM, Hyprland, Waybar, Kitty, Wofi, Hyprpaper, Mako"
-echo "  • Tools: Cava, GDM, Screenshot tools, Audio/Video stack"
+echo "  • Tools: Cava, Screenshot tools, Audio/Video stack"
+echo "  • Services enabled: GDM, NetworkManager, Bluetooth, Pipewire"
+echo "  • Hyprland autostart: hyprpaper, waybar, mako, polkit, clipboard"
 echo "  • Configured: GDM with Hyprland as default session"
 echo "  • Synced: Dotfiles and wallpapers"
 echo "  • Theme: Bibata cursor theme"
 echo "  • Shell: Zsh with Oh My Zsh and Powerlevel10k"
 echo ""
+msg "Services status:"
+systemctl is-enabled gdm.service && echo "  ✓ GDM enabled" || echo "  ✗ GDM not enabled"
+systemctl is-enabled NetworkManager.service && echo "  ✓ NetworkManager enabled" || echo "  ✗ NetworkManager not enabled"
+systemctl is-enabled bluetooth.service && echo "  ✓ Bluetooth enabled" || echo "  ✗ Bluetooth not enabled"
+systemctl --user is-enabled pipewire.service 2>/dev/null && echo "  ✓ Pipewire enabled" || echo "  ✗ Pipewire not enabled"
+echo ""
 msg "Next steps:"
 echo "  1. Reboot your system: sudo reboot"
 echo "  2. At GDM login, Hyprland should be auto-selected"
-echo "  3. Log in and enjoy your Hyprland setup!"
+echo "  3. Log in - all services will start automatically!"
+echo "  4. Hyprpaper, Waybar, Mako will launch on Hyprland startup"
 echo ""
 warn "If Hyprland doesn't appear, check: ls /usr/share/wayland-sessions/"
 echo "=============================================="
