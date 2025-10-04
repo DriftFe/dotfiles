@@ -184,85 +184,85 @@ for pkg in "${CORE_PKGS[@]}"; do
 done
 msg "✓ Core packages verified successfully"
 
-# --- Install additional package groups (ALL REQUIRED) ---
+# --- Install additional package groups (best effort) ---
 msg "Installing Hyprland utilities..."
-install_packages pacman "${HYPR_UTILS[@]}" || err "Failed to install Hyprland utilities"
+install_packages pacman "${HYPR_UTILS[@]}" || warn "Some Hyprland utilities failed to install"
 
 msg "Installing audio/video packages..."
-install_packages pacman "${AUDIO_VIDEO[@]}" || err "Failed to install audio/video packages"
+install_packages pacman "${AUDIO_VIDEO[@]}" || warn "Some audio/video packages failed to install"
 
 msg "Installing portal packages..."
-install_packages pacman "${PORTAL_PKGS[@]}" || err "Failed to install portal packages"
+install_packages pacman "${PORTAL_PKGS[@]}" || warn "Some portal packages failed to install"
 
 msg "Installing network packages..."
-install_packages pacman "${NETWORK_PKGS[@]}" || err "Failed to install network packages"
+install_packages pacman "${NETWORK_PKGS[@]}" || warn "Some network packages failed to install"
 
 msg "Installing bluetooth packages..."
-install_packages pacman "${BLUETOOTH_PKGS[@]}" || err "Failed to install bluetooth packages"
+install_packages pacman "${BLUETOOTH_PKGS[@]}" || warn "Some bluetooth packages failed to install"
 
 msg "Installing GNOME utilities..."
-install_packages pacman "${GNOME_UTILS[@]}" || err "Failed to install GNOME utilities"
+install_packages pacman "${GNOME_UTILS[@]}" || warn "Some GNOME utilities failed to install"
 
 msg "Installing screenshot tools..."
-install_packages pacman "${SCREENSHOT_PKGS[@]}" || err "Failed to install screenshot tools"
+install_packages pacman "${SCREENSHOT_PKGS[@]}" || warn "Some screenshot tools failed to install"
 
 msg "Installing fun packages (cava, cbonsai, kdenlive)..."
-install_packages pacman "${FUN_PKGS[@]}" || err "Failed to install fun packages"
+install_packages pacman "${FUN_PKGS[@]}" || warn "Some fun packages failed to install"
 
 msg "Installing fonts..."
-install_packages pacman "${FONT_PKGS[@]}" || err "Failed to install fonts"
+install_packages pacman "${FONT_PKGS[@]}" || warn "Some fonts failed to install"
 
 msg "Installing Qt packages..."
-install_packages pacman "${QT_PKGS[@]}" || err "Failed to install Qt packages"
+install_packages pacman "${QT_PKGS[@]}" || warn "Some Qt packages failed to install"
 
 msg "Installing miscellaneous packages..."
-install_packages pacman "${MISC_PKGS[@]}" || err "Failed to install miscellaneous packages"
+install_packages pacman "${MISC_PKGS[@]}" || warn "Some miscellaneous packages failed to install"
 
-# --- JetBrains Mono font (REQUIRED) ---
+# --- JetBrains Mono font (best effort) ---
 msg "Installing JetBrains Mono font..."
 if ! sudo pacman -S --needed --noconfirm ttf-jetbrains-mono; then
   msg "Trying JetBrains Mono from AUR..."
-  "$AUR_HELPER" -S --needed --noconfirm ttf-jetbrains-mono-nerd || err "Failed to install JetBrains Mono font"
+  "$AUR_HELPER" -S --needed --noconfirm ttf-jetbrains-mono-nerd || warn "Failed to install JetBrains Mono font"
 fi
 
-# --- AUR packages (ALL REQUIRED) ---
+# --- AUR packages (best effort) ---
 msg "Installing AUR packages..."
 for pkg in "${AUR_PKGS[@]}"; do
   msg "Installing $pkg from AUR..."
-  "$AUR_HELPER" -S --needed --noconfirm "$pkg" || err "Failed to install $pkg from AUR"
+  "$AUR_HELPER" -S --needed --noconfirm "$pkg" || warn "Failed to install $pkg from AUR"
 done
 
 msg "Installing AUR fonts..."
 for pkg in "${AUR_FONTS[@]}"; do
   msg "Installing $pkg from AUR..."
-  "$AUR_HELPER" -S --needed --noconfirm "$pkg" || err "Failed to install $pkg from AUR"
+  "$AUR_HELPER" -S --needed --noconfirm "$pkg" || warn "Failed to install $pkg from AUR"
 done
 
-# VS Code and Waydroid
+# VS Code and Waydroid (best effort)
 msg "Installing VS Code..."
 if ! sudo pacman -S --needed --noconfirm code; then
   msg "Trying VS Code from AUR..."
-  "$AUR_HELPER" -S --needed --noconfirm visual-studio-code-bin || err "Failed to install VS Code"
+  "$AUR_HELPER" -S --needed --noconfirm visual-studio-code-bin || warn "Failed to install VS Code"
 fi
 
 msg "Installing Waydroid..."
 if ! sudo pacman -S --needed --noconfirm waydroid; then
   msg "Trying Waydroid from AUR..."
-  "$AUR_HELPER" -S --needed --noconfirm waydroid || err "Failed to install Waydroid"
+  "$AUR_HELPER" -S --needed --noconfirm waydroid || warn "Failed to install Waydroid"
 fi
 
 # --- Enable essential services ---
 msg "Enabling and starting essential system services..."
-sudo systemctl enable NetworkManager.service || err "Failed to enable NetworkManager"
-sudo systemctl start NetworkManager.service || err "Failed to start NetworkManager"
-sudo systemctl enable bluetooth.service || err "Failed to enable bluetooth"
-sudo systemctl start bluetooth.service || err "Failed to start bluetooth"
+sudo systemctl enable NetworkManager.service || warn "Failed to enable NetworkManager"
+sudo systemctl start NetworkManager.service || warn "Failed to start NetworkManager"
+sudo systemctl enable bluetooth.service || warn "Failed to enable bluetooth"
+sudo systemctl start bluetooth.service || warn "Failed to start bluetooth"
 
 # Enable user services that should run in the user session
 msg "Enabling user services..."
-systemctl --user enable pipewire.service || err "Failed to enable pipewire"
-systemctl --user enable pipewire-pulse.service || err "Failed to enable pipewire-pulse"
-systemctl --user enable wireplumber.service || err "Failed to enable wireplumber"
+systemctl --user enable pipewire.service || warn "Failed to enable pipewire"
+systemctl --user enable pipewire-pulse.service || warn "Failed to enable pipewire-pulse"
+systemctl --user enable wireplumber.service || warn "Failed to enable wireplumber"
 
 # --- GDM configuration and Hyprland as default ---
 msg "Configuring GDM and setting Hyprland as default session..."
@@ -356,7 +356,7 @@ fi
 
 # Enable and start GDM
 msg "Enabling and starting GDM service..."
-sudo systemctl enable gdm.service || err "Failed to enable GDM"
+sudo systemctl enable gdm.service || warn "Failed to enable GDM"
 sudo systemctl start gdm.service 2>/dev/null || msg "GDM will start on next boot (not starting now to avoid session conflicts)"
 
 # Check for conflicting display managers
