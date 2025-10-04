@@ -84,7 +84,7 @@ AUR_PKGS=(
   cbonsai
   grimblast-git
   vesktop
-  zen-browser
+  zen-browser-bin
   wofi-emoji
   gpu-screen-recorder
   spotify
