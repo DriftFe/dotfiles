@@ -140,6 +140,26 @@ if [[ -f "$HP_CONF" && -d "$HOME/.wallpapers" ]]; then
 fi
 msg "Files synced."
 
+# --- Permissions for scripts ---
+msg "Ensuring scripts are executable..."
+if [[ -d "$HOME/.config/waybar/scripts" ]]; then
+  find "$HOME/.config/waybar/scripts" -type f -name "*.sh" -exec chmod +x {} +
+fi
+
+# --- Hyprland gestures fix (comment out if unsupported) ---
+if [[ -f "$HYPR_CONF" ]]; then
+  if grep -qE '^[[:space:]]*gestures[[:space:]]*\{' "$HYPR_CONF" && grep -q 'workspace_swipe' "$HYPR_CONF"; then
+    cp "$HYPR_CONF" "$HYPR_CONF.backup.$(date +%Y%m%d_%H%M%S)"
+    awk 'BEGIN{inblk=0}
+      /^[[:space:]]*gestures[[:space:]]*\{/ {print "# [installer] gestures block disabled due to unsupported workspace_swipe"; inblk=1; print "#"$0; next}
+      inblk && /^\}/ {print "#" $0; inblk=0; next}
+      inblk {print "#" $0; next}
+      {print}
+    ' "$HYPR_CONF" > "$HYPR_CONF.tmp" && mv "$HYPR_CONF.tmp" "$HYPR_CONF"
+    msg "Commented gestures block in $HYPR_CONF (backup created)."
+  fi
+fi
+
 # --- Install tools referenced by your config ---
 msg "Ensuring tools referenced by Hyprland config are installed..."
 case "$PKG_MGR" in
