@@ -7,6 +7,9 @@ DOTFILES_REPO="https://github.com/DriftFe/dotfiles"
 TMP_DIR="$(mktemp -d)"
 BACKUP_DIR="$HOME/.dotfiles_backup_$(date +%Y%m%d_%H%M%S)"
 
+# Auto-clean temp dir on exit
+trap 'rm -rf "$TMP_DIR"' EXIT
+
 WAYPAPER_CFG="$HOME/.config/waypaper/config.json"
 HYPAPER_CONF="$HOME/.config/hyprpaper/hyprpaper.conf"
 HYPR_CONF="$HOME/.config/hypr/hyprland.conf"
@@ -75,7 +78,8 @@ case "$DISTRO" in
             gdm nautilus fastfetch starship \
             zsh zsh-completions zsh-autosuggestions zsh-syntax-highlighting \
             cava mako \
-            ttf-jetbrains-mono-nerd papirus-icon-theme bibata-cursor-theme \
+            ttf-jetbrains-mono-nerd ttf-firacode-nerd ttf-roboto ttf-roboto-mono \
+            papirus-icon-theme bibata-cursor-theme \
             pipewire pipewire-pulse pipewire-alsa wireplumber \
             brightnessctl playerctl grim slurp wl-clipboard \
             polkit-gnome xdg-desktop-portal-hyprland
@@ -119,7 +123,8 @@ case "$DISTRO" in
             hyprland waybar wofi kitty hyprpaper hyprlock hypridle \
             gdm nautilus fastfetch starship \
             zsh zsh-autosuggestions zsh-syntax-highlighting \
-            cava mako jetbrains-mono-fonts-all papirus-icon-theme \
+            cava mako jetbrains-mono-fonts-all fira-code-fonts google-roboto-fonts \
+            papirus-icon-theme \
             pipewire pipewire-pulseaudio wireplumber \
             brightnessctl playerctl grim slurp wl-clipboard \
             polkit-gnome xdg-desktop-portal-hyprland || warn "Some packages may have failed to install"
@@ -130,7 +135,8 @@ case "$DISTRO" in
             hyprland waybar wofi kitty hyprpaper hyprlock \
             gdm nautilus fastfetch starship \
             zsh zsh-completions zsh-autosuggestions zsh-syntax-highlighting \
-            cava mako font-jetbrains-mono papirus-icon-theme \
+            cava mako font-jetbrains-mono font-firacode font-roboto \
+            papirus-icon-theme \
             pipewire brightnessctl playerctl grim slurp wl-clipboard polkit-gnome
         ;;
     
@@ -139,7 +145,8 @@ case "$DISTRO" in
             hyprland waybar wofi kitty hyprpaper hyprlock \
             gdm nautilus fastfetch starship \
             zsh zsh-autosuggestions zsh-syntax-highlighting \
-            cava mako jetbrains-mono-fonts papirus-icon-theme \
+            cava mako jetbrains-mono-fonts fira-code-fonts google-roboto-fonts \
+            papirus-icon-theme \
             pipewire pipewire-pulseaudio brightnessctl playerctl \
             grim slurp wl-clipboard polkit-gnome
         ;;
@@ -220,7 +227,7 @@ case "$DISTRO" in
             zsh zsh-autosuggestions zsh-syntax-highlighting zsh-common \
             pipewire pipewire-pulse pipewire-alsa wireplumber \
             policykit-1-gnome \
-            fonts-jetbrains-mono \
+            fonts-jetbrains-mono fonts-firacode fonts-roboto \
             wl-clipboard \
             curl wget git rsync
         
@@ -362,7 +369,7 @@ mkdir -p "$BACKUP_DIR"
 for item in .zshrc .config/hypr .config/waybar .config/kitty .config/wofi \
            .config/cava .config/fastfetch .config/mako .config/hyprpaper \
            .config/waypaper .config/yay .config/gtk-3.0 .config/gtk-4.0 \
-           .config/vesktop .config/starship.toml; do
+           .config/vesktop .config/starship.toml .p10k.zsh; do
     if [ -e "$HOME/$item" ]; then
         rsync -a "$HOME/$item" "$BACKUP_DIR/"
         rm -rf "$HOME/$item"
@@ -386,6 +393,14 @@ fi
 for starship_path in "$TMP_DIR/starship.toml" "$TMP_DIR/dot_config/starship.toml"; do
     if [ -f "$starship_path" ]; then
         cp "$starship_path" "$HOME/.config/"
+        break
+    fi
+done
+
+# Check for p10k config
+for p10k_path in "$TMP_DIR/.p10k.zsh" "$TMP_DIR/dot_config/.p10k.zsh"; do
+    if [ -f "$p10k_path" ]; then
+        cp "$p10k_path" "$HOME/"
         break
     fi
 done
@@ -589,7 +604,8 @@ fi
 
 # Set up some useful zsh plugins
 ZSH_PLUGINS_DIR="$HOME/.oh-my-zsh/custom/plugins"
-mkdir -p "$ZSH_PLUGINS_DIR"
+ZSH_THEMES_DIR="$HOME/.oh-my-zsh/custom/themes"
+mkdir -p "$ZSH_PLUGINS_DIR" "$ZSH_THEMES_DIR"
 
 if [ ! -d "$ZSH_PLUGINS_DIR/fast-syntax-highlighting" ]; then
     git clone https://github.com/zdharma-continuum/fast-syntax-highlighting "$ZSH_PLUGINS_DIR/fast-syntax-highlighting" 2>/dev/null || true
@@ -597,6 +613,12 @@ fi
 
 if [ ! -d "$ZSH_PLUGINS_DIR/zsh-autosuggestions" ] && [ ! -f "/usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]; then
     git clone https://github.com/zsh-users/zsh-autosuggestions "$ZSH_PLUGINS_DIR/zsh-autosuggestions" 2>/dev/null || true
+fi
+
+# Install Powerlevel10k theme
+if [ ! -d "$ZSH_THEMES_DIR/powerlevel10k" ]; then
+    msg "Installing Powerlevel10k theme..."
+    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_THEMES_DIR/powerlevel10k" 2>/dev/null || true
 fi
 
 # Fix permissions
@@ -633,5 +655,14 @@ else
 fi
 
 echo
+echo "Shell prompt options installed:"
+echo "  - Starship (modern cross-shell prompt)"
+echo "  - Powerlevel10k (zsh theme with Oh My Zsh)"
+echo
+echo "To use Powerlevel10k instead of Starship:"
+echo "  1. Edit ~/.zshrc and set: ZSH_THEME=\"powerlevel10k/powerlevel10k\""
+echo "  2. Comment out any Starship initialization (lines with 'eval \"\$(starship init zsh)\"')"
+echo "  3. Restart your terminal and run: p10k configure"
+echo
 echo "Check ~/.config/hypr/hyprland.conf for more keybinds."
-echo "Enjoy your new setup!"
+echo "Enjoy your new setup!" "
