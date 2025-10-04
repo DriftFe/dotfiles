@@ -15,320 +15,587 @@ DOTFILES_REPO="https://github.com/DriftFe/dotfiles"
 TMP_DIR="$(mktemp -d -t dotfiles-setup-XXXXXX)"
 CURSOR_DIR="$HOME/.icons"
 HYPR_CONF="$HOME/.config/hypr/hyprland.conf"
-HYPRPAPER_CONF="$HOME/.config/hyprpaper/hyprpaper.conf"
+HYPRPAPER_CONF="$HOME/.config/hypr/hyprpaper.conf"
 WOFI_STYLE="$HOME/.config/wofi/style.css"
-WALL_DIR="$HOME/.wallpapers"
+# Default wallpaper directory preference order
+WALL_DIRS=(
+  "$HOME/.config/wallpapers"
+  "$HOME/wallpapers"
+  "$HOME/.wallpapers"
+  "$HOME/Pictures/Wallpapers"
+  "$HOME/Pictures"
+)
 HYPRCURSOR_NAME="Bibata-Modern-Classic"
 HYPRCURSOR_SIZE="24"
-GDM_DEFAULT_SESSION="hyprland"
 
 # --- Ensure base tooling ---
-sudo pacman -Syu --needed --noconfirm git wget curl unzip rsync base-devel || warn "Base tools installation had issues."
+msg "Updating system and installing base tools..."
+sudo pacman -Syu --noconfirm || warn "System update had issues."
+sudo pacman -S --needed --noconfirm git wget curl unzip rsync base-devel || err "Failed to install base tools."
 
 # --- AUR helper detection/installation (yay preferred) ---
 AUR_HELPER=""
 if command -v yay &>/dev/null; then
   AUR_HELPER="yay"
+  msg "Found yay AUR helper"
 elif command -v paru &>/dev/null; then
   AUR_HELPER="paru"
+  msg "Found paru AUR helper"
 else
-  msg "No AUR helper found. Bootstrapping yay (non-root build)."
+  msg "No AUR helper found. Installing yay..."
   WORKDIR="$(mktemp -d)"
   pushd "$WORKDIR" >/dev/null
-  git clone https://aur.archlinux.org/yay.git
+  git clone https://aur.archlinux.org/yay.git || err "Failed to clone yay repository"
   pushd yay >/dev/null
-  makepkg -si --noconfirm
+  makepkg -si --noconfirm || err "Failed to build/install yay"
   popd >/dev/null
   popd >/dev/null
   rm -rf "$WORKDIR"
   AUR_HELPER="yay"
+  msg "Successfully installed yay"
 fi
 
-# --- Install packages ---
-# Core + inferred repo packages (keep this list to reliable repo packages)
-PAC_PKGS=(
-  # Display manager and base Hyprland stack
-  gdm hyprland hyprpaper hyprland-qtutils hyprlock
-  waybar wofi mako kitty
-  # Clipboard & utilities
-  cliphist wl-clipboard brightnessctl jq playerctl libnotify
-  # Audio/portals
-  pipewire wireplumber xorg-xwayland pavucontrol
-  xdg-desktop-portal-hyprland xdg-desktop-portal-gtk
-  # Networking
-  networkmanager network-manager-applet
-  # Bluetooth
-  bluez bluez-utils blueman
-  # File manager and DE bits
-  nautilus polkit-gnome gnome-keyring
-  # Touch gestures
-  touchegg
-  # Multimedia / screenshots
-  grim slurp swappy
-  # Fun/CLI
-  cava
-  # Media creation
-  kdenlive
-  # Fonts and cursors
-  noto-fonts noto-fonts-emoji ttf-font-awesome
-  bibata-cursor-theme
-  # Qt theming
-  qt5ct qt6ct qt5-wayland qt6-wayland
-  # Misc
-  rsync wget curl unzip xdg-user-dirs zsh starship
+# --- Package sets ---
+# Split into smaller batches for better error tracking
+CORE_PKGS=(
+  gdm
+  hyprland
+  hyprpaper
+  kitty
+  waybar
+  wofi
+  mako
 )
 
-# AUR packages inferred from configs (best-effort)
+HYPR_UTILS=(
+  hyprland-qtutils
+  hyprlock
+  cliphist
+  wl-clipboard
+  brightnessctl
+  jq
+  playerctl
+  libnotify
+)
+
+AUDIO_VIDEO=(
+  pipewire
+  wireplumber
+  xorg-xwayland
+  pavucontrol
+)
+
+PORTAL_PKGS=(
+  xdg-desktop-portal-hyprland
+  xdg-desktop-portal-gtk
+)
+
+NETWORK_PKGS=(
+  networkmanager
+  network-manager-applet
+)
+
+BLUETOOTH_PKGS=(
+  bluez
+  bluez-utils
+  blueman
+)
+
+GNOME_UTILS=(
+  nautilus
+  polkit-gnome
+  gnome-keyring
+)
+
+SCREENSHOT_PKGS=(
+  grim
+  slurp
+  swappy
+)
+
+FUN_PKGS=(
+  cbonsai
+  cava
+  kdenlive
+)
+
+FONT_PKGS=(
+  noto-fonts
+  noto-fonts-emoji
+  ttf-font-awesome
+)
+
+QT_PKGS=(
+  qt5ct
+  qt6ct
+  qt5-wayland
+  qt6-wayland
+)
+
+MISC_PKGS=(
+  bibata-cursor-theme
+  touchegg
+  xdg-user-dirs
+  zsh
+  starship
+)
+
 AUR_PKGS=(
   waypaper
-  cbonsai
   grimblast-git
   vesktop
   zen-browser-bin
   wofi-emoji
   gpu-screen-recorder
   spotify
-  # Symbols
-  ttf-nerd-fonts-symbols ttf-nerd-fonts-symbols-mono
 )
 
-# Prefer repo for JetBrains fonts, then fall back to AUR
-REPO_OR_AUR=(ttf-jetbrains-mono-nerd ttf-jetbrains-mono)
+AUR_FONTS=(
+  ttf-nerd-fonts-symbols
+  ttf-nerd-fonts-symbols-mono
+  ttf-jetbrains-mono-nerd
+)
 
-msg "Installing core pacman packages..."
-sudo pacman -S --needed --noconfirm "${PAC_PKGS[@]}" || warn "Some pacman packages failed."
+# --- Install function with retry ---
+install_packages() {
+  local pkg_manager="$1"
+  shift
+  local packages=("$@")
+  
+  msg "Installing with $pkg_manager: ${packages[*]}"
+  
+  if [[ "$pkg_manager" == "pacman" ]]; then
+    sudo pacman -S --needed --noconfirm "${packages[@]}" || return 1
+  else
+    "$pkg_manager" -S --needed --noconfirm "${packages[@]}" || return 1
+  fi
+  return 0
+}
 
-# Try repo first for fonts, fall back to AUR
-for pkg in "${REPO_OR_AUR[@]}"; do
-  if ! sudo pacman -S --needed --noconfirm "$pkg"; then
-    msg "Falling back to AUR for $pkg ..."
-    "$AUR_HELPER" -S --needed --noconfirm "$pkg" || warn "Failed to install $pkg via AUR."
+# --- Install core packages (critical - fail if any issue) ---
+msg "Installing CORE packages (GDM, Hyprland, Waybar, Kitty, etc.)..."
+install_packages pacman "${CORE_PKGS[@]}" || err "CRITICAL: Failed to install core packages!"
+
+# Verify core packages
+for pkg in "${CORE_PKGS[@]}"; do
+  if ! pacman -Qi "$pkg" &>/dev/null; then
+    err "CRITICAL: Package '$pkg' failed to install!"
   fi
 done
+msg "✓ Core packages verified successfully"
 
-# Install AUR packages (best-effort; continue on errors)
+# --- Install additional package groups (ALL REQUIRED) ---
+msg "Installing Hyprland utilities..."
+install_packages pacman "${HYPR_UTILS[@]}" || err "Failed to install Hyprland utilities"
+
+msg "Installing audio/video packages..."
+install_packages pacman "${AUDIO_VIDEO[@]}" || err "Failed to install audio/video packages"
+
+msg "Installing portal packages..."
+install_packages pacman "${PORTAL_PKGS[@]}" || err "Failed to install portal packages"
+
+msg "Installing network packages..."
+install_packages pacman "${NETWORK_PKGS[@]}" || err "Failed to install network packages"
+
+msg "Installing bluetooth packages..."
+install_packages pacman "${BLUETOOTH_PKGS[@]}" || err "Failed to install bluetooth packages"
+
+msg "Installing GNOME utilities..."
+install_packages pacman "${GNOME_UTILS[@]}" || err "Failed to install GNOME utilities"
+
+msg "Installing screenshot tools..."
+install_packages pacman "${SCREENSHOT_PKGS[@]}" || err "Failed to install screenshot tools"
+
+msg "Installing fun packages (cava, cbonsai, kdenlive)..."
+install_packages pacman "${FUN_PKGS[@]}" || err "Failed to install fun packages"
+
+msg "Installing fonts..."
+install_packages pacman "${FONT_PKGS[@]}" || err "Failed to install fonts"
+
+msg "Installing Qt packages..."
+install_packages pacman "${QT_PKGS[@]}" || err "Failed to install Qt packages"
+
+msg "Installing miscellaneous packages..."
+install_packages pacman "${MISC_PKGS[@]}" || err "Failed to install miscellaneous packages"
+
+# --- JetBrains Mono font (REQUIRED) ---
+msg "Installing JetBrains Mono font..."
+if ! sudo pacman -S --needed --noconfirm ttf-jetbrains-mono; then
+  msg "Trying JetBrains Mono from AUR..."
+  "$AUR_HELPER" -S --needed --noconfirm ttf-jetbrains-mono-nerd || err "Failed to install JetBrains Mono font"
+fi
+
+# --- AUR packages (ALL REQUIRED) ---
 msg "Installing AUR packages..."
-"$AUR_HELPER" -S --needed --noconfirm "${AUR_PKGS[@]}" || warn "Some AUR packages failed."
+for pkg in "${AUR_PKGS[@]}"; do
+  msg "Installing $pkg from AUR..."
+  "$AUR_HELPER" -S --needed --noconfirm "$pkg" || err "Failed to install $pkg from AUR"
+done
 
-# Try alternate AUR names for zen-browser if needed
-if ! command -v zen-browser &>/dev/null; then
-  "$AUR_HELPER" -S --needed --noconfirm zen-browser-bin || true
+msg "Installing AUR fonts..."
+for pkg in "${AUR_FONTS[@]}"; do
+  msg "Installing $pkg from AUR..."
+  "$AUR_HELPER" -S --needed --noconfirm "$pkg" || err "Failed to install $pkg from AUR"
+done
+
+# VS Code and Waydroid
+msg "Installing VS Code..."
+if ! sudo pacman -S --needed --noconfirm code; then
+  msg "Trying VS Code from AUR..."
+  "$AUR_HELPER" -S --needed --noconfirm visual-studio-code-bin || err "Failed to install VS Code"
 fi
 
-# Optional apps referenced in keybinds — install robustly
-# VS Code (code): repo first, then AUR visual-studio-code-bin
-if ! command -v code &>/dev/null; then
-  sudo pacman -S --needed --noconfirm code || "$AUR_HELPER" -S --needed --noconfirm visual-studio-code-bin || warn "Failed to install VS Code"
-fi
-# Waydroid: repo first (if present), then AUR
-if ! command -v waydroid &>/dev/null; then
-  sudo pacman -S --needed --noconfirm waydroid || "$AUR_HELPER" -S --needed --noconfirm waydroid || warn "Failed to install waydroid"
-fi
-# Powder (best-effort AUR; may not exist for all arches)
-if ! command -v powder &>/dev/null; then
-  "$AUR_HELPER" -S --needed --noconfirm powder || warn "Package 'powder' not available; skip"
+msg "Installing Waydroid..."
+if ! sudo pacman -S --needed --noconfirm waydroid; then
+  msg "Trying Waydroid from AUR..."
+  "$AUR_HELPER" -S --needed --noconfirm waydroid || err "Failed to install Waydroid"
 fi
 
 # --- Enable essential services ---
-msg "Enabling essential system services ..."
-sudo systemctl enable NetworkManager.service || warn "Failed to enable NetworkManager.service"
-sudo systemctl enable bluetooth.service || warn "Failed to enable bluetooth.service"
+msg "Enabling essential system services..."
+sudo systemctl enable NetworkManager.service || err "Failed to enable NetworkManager"
+sudo systemctl start NetworkManager.service || err "Failed to start NetworkManager"
+sudo systemctl enable bluetooth.service || err "Failed to enable bluetooth"
+sudo systemctl start bluetooth.service || err "Failed to start bluetooth"
 
-# --- GDM: install and set Hyprland as default session ---
-msg "Configuring GDM and setting default session to $GDM_DEFAULT_SESSION ..."
-if sudo pacman -Qi gdm >/dev/null 2>&1; then
-  if [[ -f "/usr/share/wayland-sessions/${GDM_DEFAULT_SESSION}.desktop" ]]; then
-    # Ensure /etc/gdm/custom.conf exists and has [daemon]
-    if [[ ! -f /etc/gdm/custom.conf ]]; then
-      sudo install -D -m 644 /dev/null /etc/gdm/custom.conf
-      echo "[daemon]" | sudo tee -a /etc/gdm/custom.conf >/dev/null
-    fi
-    if ! grep -q '^\s*\[daemon\]' /etc/gdm/custom.conf; then
-      echo -e "\n[daemon]" | sudo tee -a /etc/gdm/custom.conf >/dev/null
-    fi
-    # WaylandEnable=true
-    if grep -q '^\s*#\?\s*WaylandEnable=' /etc/gdm/custom.conf; then
-      sudo sed -i -E 's/^\s*#?\s*WaylandEnable\s*=.*/WaylandEnable=true/' /etc/gdm/custom.conf
-    else
-      sudo sed -i '/^\s*\[daemon\]/a WaylandEnable=true' /etc/gdm/custom.conf
-    fi
-    # DefaultSession=hyprland
-    if grep -q '^\s*#\?\s*DefaultSession=' /etc/gdm/custom.conf; then
-      sudo sed -i -E "s/^\s*#?\s*DefaultSession\s*=.*/DefaultSession=${GDM_DEFAULT_SESSION}/" /etc/gdm/custom.conf
-    else
-      sudo sed -i "/^\s*\[daemon\]/a DefaultSession=${GDM_DEFAULT_SESSION}" /etc/gdm/custom.conf
-    fi
-    # AccountsService: prefer Hyprland for this user
-    sudo mkdir -p /var/lib/AccountsService/users
-    if [[ ! -f "/var/lib/AccountsService/users/$USER" ]]; then
-      echo -e "[User]\nXSession=${GDM_DEFAULT_SESSION}" | sudo tee "/var/lib/AccountsService/users/$USER" >/dev/null
-    else
-      if grep -q '^XSession=' "/var/lib/AccountsService/users/$USER"; then
-        sudo sed -i -E "s/^XSession=.*/XSession=${GDM_DEFAULT_SESSION}/" "/var/lib/AccountsService/users/$USER"
-      else
-        echo "XSession=${GDM_DEFAULT_SESSION}" | sudo tee -a "/var/lib/AccountsService/users/$USER" >/dev/null
-      fi
-    fi
-    # Enable GDM
-    sudo systemctl enable gdm.service || warn "Failed to enable gdm.service"
-    # Warn if other DMs are enabled
-    OTHER_DM="$(systemctl list-unit-files | awk '/^(lightdm|sddm|lxdm)\.service/ && $2=="enabled"{print $1}' || true)"
-    if [[ -n "${OTHER_DM:-}" ]]; then
-      warn "Other display manager(s) enabled: ${OTHER_DM}. They may conflict with GDM."
-    fi
-  else
-    warn "Hyprland wayland session file not found at /usr/share/wayland-sessions/${GDM_DEFAULT_SESSION}.desktop"
+# --- GDM configuration and Hyprland as default ---
+msg "Configuring GDM and setting Hyprland as default session..."
+
+# Ensure GDM is installed
+if ! pacman -Qi gdm &>/dev/null; then
+  err "GDM is not installed! Cannot proceed with display manager setup."
+fi
+
+# Find Hyprland session file
+SESSION_FILE=""
+POSSIBLE_SESSIONS=(
+  "/usr/share/wayland-sessions/hyprland.desktop"
+  "/usr/share/xsessions/hyprland.desktop"
+)
+
+for session in "${POSSIBLE_SESSIONS[@]}"; do
+  if [[ -f "$session" ]]; then
+    SESSION_FILE="$session"
+    break
   fi
+done
+
+if [[ -z "$SESSION_FILE" ]]; then
+  # Search for any hyprland session
+  SESSION_FILE="$(find /usr/share/{wayland-sessions,xsessions} -type f -iname '*hyprland*.desktop' 2>/dev/null | head -n1 || true)"
+fi
+
+if [[ -z "$SESSION_FILE" ]]; then
+  warn "No Hyprland session file found! GDM may not show Hyprland option."
 else
-  warn "GDM not installed; skipping GDM configuration."
+  SESSION_NAME="$(basename "$SESSION_FILE" .desktop)"
+  msg "Found Hyprland session: $SESSION_NAME at $SESSION_FILE"
+  
+  # Configure GDM custom.conf
+  GDM_CONF="/etc/gdm/custom.conf"
+  sudo mkdir -p /etc/gdm
+  
+  if [[ ! -f "$GDM_CONF" ]]; then
+    msg "Creating $GDM_CONF..."
+    echo "[daemon]" | sudo tee "$GDM_CONF" >/dev/null
+  fi
+  
+  # Ensure [daemon] section exists
+  if ! grep -q '^\[daemon\]' "$GDM_CONF"; then
+    echo -e "\n[daemon]" | sudo tee -a "$GDM_CONF" >/dev/null
+  fi
+  
+  # Set WaylandEnable=true
+  if grep -q '^[[:space:]]*#\?[[:space:]]*WaylandEnable=' "$GDM_CONF"; then
+    sudo sed -i 's/^[[:space:]]*#\?[[:space:]]*WaylandEnable=.*/WaylandEnable=true/' "$GDM_CONF"
+  else
+    sudo sed -i '/^\[daemon\]/a WaylandEnable=true' "$GDM_CONF"
+  fi
+  
+  # Set DefaultSession
+  if grep -q '^[[:space:]]*#\?[[:space:]]*DefaultSession=' "$GDM_CONF"; then
+    sudo sed -i "s/^[[:space:]]*#\?[[:space:]]*DefaultSession=.*/DefaultSession=${SESSION_NAME}/" "$GDM_CONF"
+  else
+    sudo sed -i "/^\[daemon\]/a DefaultSession=${SESSION_NAME}" "$GDM_CONF"
+  fi
+  
+  msg "GDM configured with DefaultSession=${SESSION_NAME}"
+  
+  # Configure AccountsService for user
+  ACCOUNTS_DIR="/var/lib/AccountsService/users"
+  sudo mkdir -p "$ACCOUNTS_DIR"
+  USER_ACCOUNT="$ACCOUNTS_DIR/$USER"
+  
+  if [[ ! -f "$USER_ACCOUNT" ]]; then
+    echo -e "[User]\nSession=${SESSION_NAME}\nXSession=${SESSION_NAME}\nSystemAccount=false" | sudo tee "$USER_ACCOUNT" >/dev/null
+  else
+    # Update existing file
+    if ! grep -q '^\[User\]' "$USER_ACCOUNT"; then
+      echo -e "\n[User]" | sudo tee -a "$USER_ACCOUNT" >/dev/null
+    fi
+    if grep -q '^Session=' "$USER_ACCOUNT"; then
+      sudo sed -i "s/^Session=.*/Session=${SESSION_NAME}/" "$USER_ACCOUNT"
+    else
+      sudo sed -i "/^\[User\]/a Session=${SESSION_NAME}" "$USER_ACCOUNT"
+    fi
+    if grep -q '^XSession=' "$USER_ACCOUNT"; then
+      sudo sed -i "s/^XSession=.*/XSession=${SESSION_NAME}/" "$USER_ACCOUNT"
+    else
+      sudo sed -i "/^\[User\]/a XSession=${SESSION_NAME}" "$USER_ACCOUNT"
+    fi
+  fi
+  
+  msg "AccountsService configured for user $USER"
 fi
 
-# --- Prepare user dirs ---
+# Enable and start GDM
+msg "Enabling GDM service..."
+sudo systemctl enable gdm.service || err "Failed to enable GDM"
+
+# Check for conflicting display managers
+OTHER_DMS=(lightdm sddm lxdm)
+for dm in "${OTHER_DMS[@]}"; do
+  if systemctl is-enabled "${dm}.service" &>/dev/null; then
+    warn "Disabling conflicting display manager: ${dm}"
+    sudo systemctl disable "${dm}.service" || true
+  fi
+done
+
+# --- Prepare user directories ---
+msg "Creating user directories..."
 xdg-user-dirs-update 2>/dev/null || true
-mkdir -p "$HOME/Pictures/Screenshots" "$HOME/Videos" || true
+mkdir -p "$HOME/Pictures/Screenshots" "$HOME/Videos" "$HOME/Downloads" || true
 
-# --- Fetch dotfiles ---
-msg "Fetching dotfiles from $DOTFILES_REPO ..."
-rm -rf "$TMP_DIR" && mkdir -p "$TMP_DIR"
-if ! git clone --depth=1 "$DOTFILES_REPO" "$TMP_DIR"; then
-  warn "Failed to clone $DOTFILES_REPO, continuing without remote dotfiles."
-fi
+# --- Fetch and sync dotfiles ---
+msg "Fetching dotfiles from $DOTFILES_REPO..."
+rm -rf "$TMP_DIR"
+mkdir -p "$TMP_DIR"
 
-# --- Sync dot_* and optional .config from repo (best-effort) ---
-if [[ -d "$TMP_DIR" && -n "$(ls -A "$TMP_DIR" 2>/dev/null || true)" ]]; then
-  msg "Syncing dot_* content and wallpapers from repo..."
-  mkdir -p "$HOME/.config" "$WALL_DIR"
+if git clone --depth=1 "$DOTFILES_REPO" "$TMP_DIR"; then
+  msg "Successfully cloned dotfiles repository"
+  
+  # Sync dot_* directories
+  msg "Syncing dot_* directories..."
   shopt -s nullglob
-  for SRC in "$TMP_DIR"/dot_*; do
-    base="$(basename "$SRC")"
-    target="$HOME/.${base#dot_}"
-    mkdir -p "$target"
-    rsync -a --info=NAME,STATS --exclude='.git' "$SRC/." "$target/"
+  for src_dir in "$TMP_DIR"/dot_*; do
+    if [[ -d "$src_dir" ]]; then
+      base="$(basename "$src_dir")"
+      target="$HOME/.${base#dot_}"
+      msg "Syncing $base -> $target"
+      mkdir -p "$target"
+      rsync -av --exclude='.git' "$src_dir/" "$target/" || err "Failed to sync $base"
+    fi
   done
   shopt -u nullglob
-
+  
+  # Sync .config if present
   if [[ -d "$TMP_DIR/.config" ]]; then
-    rsync -a --info=NAME,STATS --exclude='.git' "$TMP_DIR/.config/." "$HOME/.config/"
+    msg "Syncing .config directory..."
+    mkdir -p "$HOME/.config"
+    rsync -av --exclude='.git' "$TMP_DIR/.config/" "$HOME/.config/" || err "Failed to sync .config"
   fi
-
-  if [[ -d "$TMP_DIR/wallpapers" ]]; then
-    rsync -a --info=NAME,STATS "$TMP_DIR/wallpapers/." "$WALL_DIR/"
-  elif [[ -d "$TMP_DIR/.wallpapers" ]]; then
-    rsync -a --info=NAME,STATS "$TMP_DIR/.wallpapers/." "$WALL_DIR/"
+  
+  # Sync wallpapers - try multiple possible locations
+  WALLPAPER_SYNCED=false
+  for wall_src in "$TMP_DIR/wallpapers" "$TMP_DIR/.wallpapers" "$TMP_DIR/dot_wallpapers" "$TMP_DIR/.config/wallpapers"; do
+    if [[ -d "$wall_src" ]]; then
+      msg "Found wallpapers in $wall_src, syncing to ~/.config/wallpapers..."
+      mkdir -p "$HOME/.config/wallpapers"
+      rsync -av "$wall_src/" "$HOME/.config/wallpapers/" || err "Failed to sync wallpapers"
+      WALLPAPER_SYNCED=true
+      break
+    fi
+  done
+  
+  if [[ "$WALLPAPER_SYNCED" == "false" ]]; then
+    err "No wallpapers directory found in repository - required for setup"
+  else
+    msg "✓ Wallpapers synced successfully"
   fi
+else
+  err "Failed to clone dotfiles repository - cannot continue"
 fi
 
-# --- Also copy local zsh and starship configs from script directory if present ---
+# --- Copy local configs from script directory ---
 if [[ -f "$SCRIPT_DIR/.zshrc" ]]; then
-  msg "Copying .zshrc from $SCRIPT_DIR to $HOME ..."
+  msg "Copying .zshrc from script directory..."
   cp -f "$SCRIPT_DIR/.zshrc" "$HOME/.zshrc"
 fi
+
 if [[ -f "$SCRIPT_DIR/starship.toml" ]]; then
-  msg "Copying starship.toml from $SCRIPT_DIR to ~/.config ..."
+  msg "Copying starship.toml from script directory..."
   mkdir -p "$HOME/.config"
   cp -f "$SCRIPT_DIR/starship.toml" "$HOME/.config/starship.toml"
 fi
 
-# --- Ensure scripts executable ---
+# --- Make scripts executable ---
 if [[ -d "$HOME/.config/waybar/scripts" ]]; then
-  find "$HOME/.config/waybar/scripts" -type f -name "*.sh" -exec chmod +x {} +
+  msg "Making Waybar scripts executable..."
+  find "$HOME/.config/waybar/scripts" -type f \( -name "*.sh" -o -name "*.py" \) -exec chmod +x {} +
 fi
 
-# --- hyprpaper configuration (use ~/. path as requested) ---
+if [[ -d "$HOME/.config/hypr/scripts" ]]; then
+  msg "Making Hypr scripts executable..."
+  find "$HOME/.config/hypr/scripts" -type f \( -name "*.sh" -o -name "*.py" \) -exec chmod +x {} +
+fi
+
+# --- Configure hyprpaper with actual wallpaper ---
+msg "Configuring hyprpaper..."
 mkdir -p "$(dirname "$HYPRPAPER_CONF")"
-DEFAULT_WP="$WALL_DIR/wallpaper.png"
-# Pick a first image if default not present
-if [[ ! -f "$DEFAULT_WP" ]]; then
-  CANDIDATE="$(find "$WALL_DIR" -maxdepth 1 -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) | head -n1 || true)"
-  if [[ -n "${CANDIDATE:-}" ]]; then
-    DEFAULT_WP="$CANDIDATE"
-  fi
-fi
-# Always write with tilde path expansion literal
-TILDE_WP="~/.wallpapers/$(basename "$DEFAULT_WP" 2>/dev/null || echo wallpaper.png)"
-cat > "$HYPRPAPER_CONF" <<EOF
-splash = false
-preload = $TILDE_WP
-wallpaper = ,$TILDE_WP
-EOF
 
-# --- wofi: force JetBrains Mono Nerd as primary font ---
-if [[ -f "$WOFI_STYLE" ]]; then
-  # Replace any font-family line with our preferred stack
-  sed -i 's/^\([[:space:]]*font-family:.*\)$/  font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", monospace, "Font Awesome 6 Free";/' "$WOFI_STYLE" || true
-fi
-
-# --- Cursor theme installation and configuration ---
-mkdir -p "$CURSOR_DIR"
-# If the repo package failed, try AUR bibata-cursor-theme-bin
-if [[ ! -d "$CURSOR_DIR/$HYPRCURSOR_NAME" && ! -d "/usr/share/icons/$HYPRCURSOR_NAME" ]]; then
-  "$AUR_HELPER" -S --needed --noconfirm bibata-cursor-theme-bin || true
-fi
-
-# GTK settings (best-effort)
-for gtkdir in "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"; do
-  mkdir -p "$gtkdir"
-  ini="$gtkdir/settings.ini"
-  touch "$ini"
-  if grep -q '^gtk-cursor-theme-name=' "$ini"; then
-    sed -i "s/^gtk-cursor-theme-name=.*/gtk-cursor-theme-name=$HYPRCURSOR_NAME/" "$ini"
-  else
-    echo "gtk-cursor-theme-name=$HYPRCURSOR_NAME" >> "$ini"
-  fi
-  if grep -q '^gtk-cursor-size=' "$ini"; then
-    sed -i "s/^gtk-cursor-size=.*/gtk-cursor-size=$HYPRCURSOR_SIZE/" "$ini"
-  else
-    echo "gtk-cursor-size=$HYPRCURSOR_SIZE" >> "$ini"
+# Find first wallpaper
+WP_PATH=""
+for wall_dir in "${WALL_DIRS[@]}"; do
+  if [[ -d "$wall_dir" ]]; then
+    WP_PATH="$(find "$wall_dir" -maxdepth 1 -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) -print -quit 2>/dev/null || true)"
+    if [[ -n "$WP_PATH" ]]; then
+      msg "Found wallpaper: $WP_PATH"
+      break
+    fi
   fi
 done
 
-# Hyprland env ensures cursor usage
-mkdir -p "$(dirname "$HYPR_CONF")" && touch "$HYPR_CONF"
-append_if_missing() {
-  local key="$1"; shift
-  local line="$1"
-  grep -q "^$key" "$HYPR_CONF" || echo "$line" >> "$HYPR_CONF"
-}
-append_if_missing 'env[[:space:]]*= HYPRCURSOR_THEME,' "env = HYPRCURSOR_THEME,$HYPRCURSOR_NAME"
-append_if_missing 'env[[:space:]]*= HYPRCURSOR_SIZE,'  "env = HYPRCURSOR_SIZE,$HYPRCURSOR_SIZE"
-append_if_missing 'env[[:space:]]*= XCURSOR_THEME,'     "env = XCURSOR_THEME,$HYPRCURSOR_NAME"
-append_if_missing 'env[[:space:]]*= XCURSOR_SIZE,'      "env = XCURSOR_SIZE,$HYPRCURSOR_SIZE"
+if [[ -z "$WP_PATH" ]]; then
+  warn "No wallpapers found! Creating placeholder config."
+  WP_PATH="$HOME/.config/wallpapers/default.png"
+fi
 
-# GNOME (if present) for completeness
+# Write hyprpaper config
+cat > "$HYPRPAPER_CONF" <<EOF
+splash = false
+ipc = on
+
+preload = ${WP_PATH}
+wallpaper = ,${WP_PATH}
+EOF
+
+msg "✓ hyprpaper configured with wallpaper: $WP_PATH"
+
+# --- Configure wofi fonts ---
+if [[ -f "$WOFI_STYLE" ]]; then
+  msg "Configuring wofi to use JetBrains Mono Nerd Font..."
+  sed -i 's/font-family:.*$/font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", monospace;/' "$WOFI_STYLE" || true
+fi
+
+# --- Cursor theme setup ---
+msg "Setting up Bibata cursor theme..."
+mkdir -p "$CURSOR_DIR"
+
+# Install from AUR if needed
+if [[ ! -d "$CURSOR_DIR/$HYPRCURSOR_NAME" ]] && [[ ! -d "/usr/share/icons/$HYPRCURSOR_NAME" ]]; then
+  "$AUR_HELPER" -S --needed --noconfirm bibata-cursor-theme-bin || warn "Failed to install Bibata cursor theme"
+fi
+
+# GTK cursor settings
+for gtk_ver in gtk-3.0 gtk-4.0; do
+  gtk_dir="$HOME/.config/$gtk_ver"
+  mkdir -p "$gtk_dir"
+  settings_ini="$gtk_dir/settings.ini"
+  
+  if [[ ! -f "$settings_ini" ]]; then
+    echo "[Settings]" > "$settings_ini"
+  fi
+  
+  if grep -q '^gtk-cursor-theme-name=' "$settings_ini"; then
+    sed -i "s/^gtk-cursor-theme-name=.*/gtk-cursor-theme-name=$HYPRCURSOR_NAME/" "$settings_ini"
+  else
+    echo "gtk-cursor-theme-name=$HYPRCURSOR_NAME" >> "$settings_ini"
+  fi
+  
+  if grep -q '^gtk-cursor-theme-size=' "$settings_ini"; then
+    sed -i "s/^gtk-cursor-theme-size=.*/gtk-cursor-theme-size=$HYPRCURSOR_SIZE/" "$settings_ini"
+  else
+    echo "gtk-cursor-theme-size=$HYPRCURSOR_SIZE" >> "$settings_ini"
+  fi
+done
+
+# Hyprland cursor environment variables
+mkdir -p "$(dirname "$HYPR_CONF")"
+if [[ ! -f "$HYPR_CONF" ]]; then
+  touch "$HYPR_CONF"
+fi
+
+append_env_if_missing() {
+  local env_var="$1"
+  local env_line="$2"
+  if ! grep -q "^env = $env_var," "$HYPR_CONF"; then
+    echo "$env_line" >> "$HYPR_CONF"
+  fi
+}
+
+append_env_if_missing "HYPRCURSOR_THEME" "env = HYPRCURSOR_THEME,$HYPRCURSOR_NAME"
+append_env_if_missing "HYPRCURSOR_SIZE" "env = HYPRCURSOR_SIZE,$HYPRCURSOR_SIZE"
+append_env_if_missing "XCURSOR_THEME" "env = XCURSOR_THEME,$HYPRCURSOR_NAME"
+append_env_if_missing "XCURSOR_SIZE" "env = XCURSOR_SIZE,$HYPRCURSOR_SIZE"
+
+# gsettings for GNOME apps
 if command -v gsettings &>/dev/null; then
   gsettings set org.gnome.desktop.interface cursor-theme "$HYPRCURSOR_NAME" 2>/dev/null || true
   gsettings set org.gnome.desktop.interface cursor-size "$HYPRCURSOR_SIZE" 2>/dev/null || true
 fi
 
-# --- Zsh, Oh-my-zsh, P10k, Autosuggestions bootstrap ---
-msg "Setting up Zsh, Oh My Zsh, Powerlevel10k, and zsh-autosuggestions ..."
-if ! command -v zsh &>/dev/null; then
-  warn "zsh not found after install; check pacman logs."
-fi
-# Oh My Zsh
+msg "✓ Cursor theme configured"
+
+# --- Zsh setup ---
+msg "Setting up Zsh, Oh My Zsh, and plugins..."
+
+# Install Oh My Zsh
 if [[ ! -d "$HOME/.oh-my-zsh" ]]; then
-  git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git "$HOME/.oh-my-zsh" || warn "Failed to clone Oh My Zsh"
+  msg "Installing Oh My Zsh..."
+  RUNZSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" || \
+    git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git "$HOME/.oh-my-zsh" || \
+    warn "Failed to install Oh My Zsh"
 fi
-# P10k theme under OMZ custom
+
+# Install Powerlevel10k
 ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
 mkdir -p "$ZSH_CUSTOM/themes"
 if [[ ! -d "$ZSH_CUSTOM/themes/powerlevel10k" ]]; then
-  git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_CUSTOM/themes/powerlevel10k" || warn "Failed to clone Powerlevel10k"
+  msg "Installing Powerlevel10k theme..."
+  git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_CUSTOM/themes/powerlevel10k" || \
+    warn "Failed to install Powerlevel10k"
 fi
-# zsh-autosuggestions in ~/.zsh as referenced by your .zshrc
+
+# Install zsh-autosuggestions
 mkdir -p "$HOME/.zsh"
 if [[ ! -d "$HOME/.zsh/zsh-autosuggestions" ]]; then
-  git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions "$HOME/.zsh/zsh-autosuggestions" || warn "Failed to clone zsh-autosuggestions"
+  msg "Installing zsh-autosuggestions..."
+  git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions "$HOME/.zsh/zsh-autosuggestions" || \
+    warn "Failed to install zsh-autosuggestions"
 fi
-# Make zsh default shell (best effort)
+
+# Set zsh as default shell
 if command -v zsh &>/dev/null; then
-  if [[ "$(getent passwd "$USER" | cut -d: -f7)" != "$(command -v zsh)" ]]; then
-    chsh -s "$(command -v zsh)" "$USER" || warn "Unable to set zsh as default shell (you can run: chsh -s \"$(command -v zsh)\")"
+  ZSH_PATH="$(command -v zsh)"
+  CURRENT_SHELL="$(getent passwd "$USER" | cut -d: -f7)"
+  if [[ "$CURRENT_SHELL" != "$ZSH_PATH" ]]; then
+    msg "Setting zsh as default shell..."
+    chsh -s "$ZSH_PATH" "$USER" || warn "Failed to set zsh as default shell. Run manually: chsh -s $ZSH_PATH"
   fi
 fi
 
 # --- Cleanup ---
+msg "Cleaning up temporary files..."
 rm -rf "$TMP_DIR" || true
 
-msg "Done. Reboot to reach the GDM login screen and auto-start Hyprland."
-msg "Services enabled (ensure started after reboot): NetworkManager, Bluetooth, GDM."
+# --- Final summary ---
+echo ""
+echo "=============================================="
+msg "✓ Installation complete!"
+echo "=============================================="
+echo ""
+msg "Installed and verified:"
+echo "  • Core: GDM, Hyprland, Waybar, Kitty, Wofi, Hyprpaper, Mako"
+echo "  • Tools: Cava, GDM, Screenshot tools, Audio/Video stack"
+echo "  • Configured: GDM with Hyprland as default session"
+echo "  • Synced: Dotfiles and wallpapers"
+echo "  • Theme: Bibata cursor theme"
+echo "  • Shell: Zsh with Oh My Zsh and Powerlevel10k"
+echo ""
+msg "Next steps:"
+echo "  1. Reboot your system: sudo reboot"
+echo "  2. At GDM login, Hyprland should be auto-selected"
+echo "  3. Log in and enjoy your Hyprland setup!"
+echo ""
+warn "If Hyprland doesn't appear, check: ls /usr/share/wayland-sessions/"
+echo "=============================================="
