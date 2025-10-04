@@ -1,271 +1,188 @@
 #!/usr/bin/env bash
 
+# Arch-only dotfiles installer for Hyprland
+# - Installs required repo and AUR packages (via yay/paru; bootstraps yay if missing)
+# - Syncs dotfiles + wallpapers from the repo
+# - Ensures hyprpaper and wofi font config
+# - Sets Bibata cursor theme system-wide (GTK + Hypr env)
+
 set -euo pipefail
 
-# --- Functions ---
+# --- UI helpers ---
 msg()  { echo -e "\e[32m[INFO]\e[0m  $*"; }
 warn() { echo -e "\e[33m[WARN]\e[0m  $*"; }
 err()  { echo -e "\e[31m[ERROR]\e[0m $*" >&2; exit 1; }
 
-# --- Variables ---
+# --- Pre-flight: ensure Arch ---
+command -v pacman >/dev/null 2>&1 || err "This script supports only Arch-based systems (pacman not found)."
+
+# --- Vars ---
 DOTFILES_REPO="https://github.com/DriftFe/dotfiles"
 TMP_DIR="$(mktemp -d -t dotfiles-setup-XXXXXX)"
 CURSOR_DIR="$HOME/.icons"
 HYPR_CONF="$HOME/.config/hypr/hyprland.conf"
+HYPRPAPER_CONF="$HOME/.config/hyprpaper/hyprpaper.conf"
+WOFI_STYLE="$HOME/.config/wofi/style.css"
+WALL_DIR="$HOME/.wallpapers"
 HYPRCURSOR_NAME="Bibata-Modern-Classic"
 HYPRCURSOR_SIZE="24"
 
-# --- Detect package manager ---
-PKG_MGR=""
-INSTALL_CMD=""
-if command -v pacman &>/dev/null; then
-  PKG_MGR="pacman"
-  INSTALL_CMD="pacman -S --noconfirm"
-elif command -v apt &>/dev/null; then
-  PKG_MGR="apt"
-  INSTALL_CMD="apt install -y"
-elif command -v dnf &>/dev/null; then
-  PKG_MGR="dnf"
-  INSTALL_CMD="dnf install -y"
+# --- Ensure base tooling ---
+sudo pacman -Syu --needed --noconfirm git wget curl unzip rsync base-devel || warn "Base tools installation had issues."
+
+# --- AUR helper detection/installation (yay preferred) ---
+AUR_HELPER=""
+if command -v yay &>/dev/null; then
+  AUR_HELPER="yay"
+elif command -v paru &>/dev/null; then
+  AUR_HELPER="paru"
 else
-  err "No supported package manager found (pacman, apt, or dnf)."
+  msg "No AUR helper found. Bootstrapping yay (non-root build)."
+  WORKDIR="$(mktemp -d)"
+  pushd "$WORKDIR" >/dev/null
+  git clone https://aur.archlinux.org/yay.git
+  pushd yay >/dev/null
+  makepkg -si --noconfirm
+  popd >/dev/null
+  popd >/dev/null
+  rm -rf "$WORKDIR"
+  AUR_HELPER="yay"
 fi
 
-# Helper: install a package best-effort
-install_pkg() {
-  local pkg="$1"
-  if [[ -z "$pkg" ]]; then return 0; fi
-  msg "Installing package: $pkg"
-  if ! sudo $INSTALL_CMD "$pkg"; then
-    warn "Failed to install '$pkg'. Continuing."
+# --- Install packages ---
+# Core repo packages
+PAC_PKGS=(
+  hyprland hyprpaper hyprland-qtutils
+  waybar wofi mako kitty
+  cliphist wl-clipboard network-manager-applet touchegg
+  rsync wget curl unzip
+  noto-fonts noto-fonts-emoji ttf-font-awesome
+  bibata-cursor-theme
+)
+
+# Try to install Nerd font + JetBrains packages from repo first, otherwise AUR
+REPO_OR_AUR=(ttf-jetbrains-mono-nerd ttf-jetbrains-mono)
+
+msg "Installing core pacman packages..."
+sudo pacman -S --needed --noconfirm "${PAC_PKGS[@]}" || warn "Some pacman packages failed."
+
+# Try repo first for fonts, fall back to AUR
+for pkg in "${REPO_OR_AUR[@]}"; do
+  if ! sudo pacman -S --needed --noconfirm "$pkg"; then
+    msg "Falling back to AUR for $pkg ..."
+    "$AUR_HELPER" -S --needed --noconfirm "$pkg" || warn "Failed to install $pkg via AUR."
   fi
-}
+done
 
-# Helper: ensure a command exists by installing an appropriate package
-ensure_cmd() {
-  local cmd="$1"; shift
-  local pkg="${1:-}"; shift || true
+# Additional AUR packages
+AUR_PKGS=(
+  waypaper
+  ttf-nerd-fonts-symbols ttf-nerd-fonts-symbols-mono
+)
+msg "Installing AUR packages..."
+"$AUR_HELPER" -S --needed --noconfirm "${AUR_PKGS[@]}" || warn "Some AUR packages failed."
 
-  if command -v "$cmd" &>/dev/null; then
-    msg "'$cmd' already present."
-    return 0
-  fi
-
-  # Choose default package name if not provided
-  if [[ -z "$pkg" ]]; then
-    pkg="$cmd"
-  fi
-  install_pkg "$pkg"
-}
-
-# Helper: sync/copy preserving attributes (merge, not delete)
-sync_path() {
-  local src="$1"
-  local dst="$2"
-  mkdir -p "$dst"
-  if command -v rsync &>/dev/null; then
-    rsync -a --info=NAME,STATS --exclude='.git' "$src" "$dst"
-  else
-    cp -a "$src" "$dst"
-  fi
-}
-
-# --- Start ---
-msg "Starting dotfiles installation..."
-
-# --- Essentials ---
-msg "Installing required base packages..."
-case "$PKG_MGR" in
-  pacman)
-    sudo pacman -S --noconfirm git wget curl unzip rsync || warn "Some base packages failed to install."
-    ;;
-  apt|dnf)
-    sudo $INSTALL_CMD git wget curl unzip rsync || warn "Some base packages failed to install."
-    ;;
-esac
-
-# --- Clone dotfiles ---
-msg "Fetching dotfiles..."
-if [[ -d "$TMP_DIR" ]]; then rm -rf "$TMP_DIR"; fi
-mkdir -p "$TMP_DIR"
+# --- Fetch dotfiles ---
+msg "Fetching dotfiles from $DOTFILES_REPO ..."
+rm -rf "$TMP_DIR" && mkdir -p "$TMP_DIR"
 if ! git clone --depth=1 "$DOTFILES_REPO" "$TMP_DIR"; then
   err "Failed to clone $DOTFILES_REPO"
 fi
-msg "Dotfiles cloned successfully to $TMP_DIR."
 
-# --- Copy dot_* directories/files and wallpapers ---
+# --- Sync dot_* and optional .config ---
 msg "Syncing dot_* content and wallpapers..."
-mkdir -p "$HOME/.config" "$HOME/.wallpapers"
-
-# Map dot_* -> hidden paths in $HOME (e.g., dot_config -> ~/.config)
+mkdir -p "$HOME/.config" "$WALL_DIR"
 shopt -s nullglob
-mapped_any=false
 for SRC in "$TMP_DIR"/dot_*; do
-  [[ -e "$SRC" ]] || continue
-  mapped_any=true
   base="$(basename "$SRC")"
   target="$HOME/.${base#dot_}"
-  if [[ -d "$SRC" ]]; then
-    sync_path "$SRC/." "$target/"
-  else
-    mkdir -p "$(dirname "$target")"
-    if command -v rsync &>/dev/null; then
-      rsync -a "$SRC" "$target"
-    else
-      cp -a "$SRC" "$target"
-    fi
-  fi
+  mkdir -p "$target"
+  rsync -a --info=NAME,STATS --exclude='.git' "$SRC/." "$target/"
 done
 shopt -u nullglob
 
-# Fallback: if repo provides .config, merge it
 if [[ -d "$TMP_DIR/.config" ]]; then
-  sync_path "$TMP_DIR/.config/." "$HOME/.config/"
+  rsync -a --info=NAME,STATS --exclude='.git' "$TMP_DIR/.config/." "$HOME/.config/"
 fi
 
-# Wallpapers: copy from either wallpapers or .wallpapers to ~/.wallpapers
 if [[ -d "$TMP_DIR/wallpapers" ]]; then
-  sync_path "$TMP_DIR/wallpapers/." "$HOME/.wallpapers/"
+  rsync -a --info=NAME,STATS "$TMP_DIR/wallpapers/." "$WALL_DIR/"
 elif [[ -d "$TMP_DIR/.wallpapers" ]]; then
-  sync_path "$TMP_DIR/.wallpapers/." "$HOME/.wallpapers/"
+  rsync -a --info=NAME,STATS "$TMP_DIR/.wallpapers/." "$WALL_DIR/"
 fi
 
-# Update hyprpaper config paths to current $HOME if a wallpaper exists
-HP_CONF="$HOME/.config/hypr/hyprpaper.conf"
-if [[ -f "$HP_CONF" && -d "$HOME/.wallpapers" ]]; then
-  wp_file="$(find "$HOME/.wallpapers" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.png' \) | head -n1)"
-  if [[ -n "$wp_file" ]]; then
-    sed -i "s|^preload = .*|preload = $wp_file|; s|^wallpaper = ,.*|wallpaper = ,$wp_file|" "$HP_CONF" || true
-  fi
-fi
-msg "Files synced."
-
-# --- Permissions for scripts ---
-msg "Ensuring scripts are executable..."
+# --- Ensure scripts executable ---
 if [[ -d "$HOME/.config/waybar/scripts" ]]; then
   find "$HOME/.config/waybar/scripts" -type f -name "*.sh" -exec chmod +x {} +
 fi
 
-# --- Hyprland gestures fix (comment out if unsupported) ---
-if [[ -f "$HYPR_CONF" ]]; then
-  if grep -qE '^[[:space:]]*gestures[[:space:]]*\{' "$HYPR_CONF" && grep -q 'workspace_swipe' "$HYPR_CONF"; then
-    cp "$HYPR_CONF" "$HYPR_CONF.backup.$(date +%Y%m%d_%H%M%S)"
-    awk 'BEGIN{inblk=0}
-      /^[[:space:]]*gestures[[:space:]]*\{/ {print "# [installer] gestures block disabled due to unsupported workspace_swipe"; inblk=1; print "#"$0; next}
-      inblk && /^\}/ {print "#" $0; inblk=0; next}
-      inblk {print "#" $0; next}
-      {print}
-    ' "$HYPR_CONF" > "$HYPR_CONF.tmp" && mv "$HYPR_CONF.tmp" "$HYPR_CONF"
-    msg "Commented gestures block in $HYPR_CONF (backup created)."
+# --- hyprpaper configuration (use ~/. path as requested) ---
+mkdir -p "$(dirname "$HYPRPAPER_CONF")"
+DEFAULT_WP="$WALL_DIR/wallpaper.png"
+# Pick a first image if default not present
+if [[ ! -f "$DEFAULT_WP" ]]; then
+  CANDIDATE="$(find "$WALL_DIR" -maxdepth 1 -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) | head -n1 || true)"
+  if [[ -n "${CANDIDATE:-}" ]]; then
+    DEFAULT_WP="$CANDIDATE"
   fi
 fi
+# Always write with tilde path expansion literal
+TILDE_WP="~/.wallpapers/$(basename "$DEFAULT_WP" 2>/dev/null || echo wallpaper.png)"
+cat > "$HYPRPAPER_CONF" <<EOF
+splash = false
+preload = $TILDE_WP
+wallpaper = ,$TILDE_WP
+EOF
 
-# --- Install tools referenced by your config ---
-msg "Ensuring tools referenced by Hyprland config are installed..."
-case "$PKG_MGR" in
-  pacman)
-    # Package names for Arch-based
-    ensure_cmd hyprctl hyprland
-    ensure_cmd kitty kitty
-    ensure_cmd wl-copy wl-clipboard
-    ensure_cmd wl-paste wl-clipboard
-    ensure_cmd waybar waybar
-    ensure_cmd hyprpaper hyprpaper
-    ensure_cmd wofi wofi
-    ensure_cmd mako mako
-    ensure_cmd waypaper waypaper
-    ensure_cmd touchegg touchegg
-    ensure_cmd nm-applet network-manager-applet
-    ensure_cmd cliphist cliphist
-    ;;
-  apt)
-    # Debian/Ubuntu family (best-effort; some may be unavailable on certain releases)
-    ensure_cmd hyprctl hyprland || true
-    ensure_cmd kitty kitty
-    ensure_cmd wl-copy wl-clipboard
-    ensure_cmd wl-paste wl-clipboard
-    ensure_cmd waybar waybar
-    ensure_cmd hyprpaper hyprpaper || true
-    ensure_cmd wofi wofi
-    ensure_cmd mako mako
-    ensure_cmd waypaper waypaper || true
-    ensure_cmd touchegg touchegg
-    ensure_cmd nm-applet network-manager-gnome
-    ensure_cmd cliphist cliphist || true
-    ;;
-  dnf)
-    # Fedora family (best-effort; hyprland may require COPR)
-    ensure_cmd hyprctl hyprland || true
-    ensure_cmd kitty kitty
-    ensure_cmd wl-copy wl-clipboard
-    ensure_cmd wl-paste wl-clipboard
-    ensure_cmd waybar waybar
-    ensure_cmd hyprpaper hyprpaper || true
-    ensure_cmd wofi wofi
-    ensure_cmd mako mako
-    ensure_cmd waypaper waypaper || true
-    ensure_cmd touchegg touchegg
-    ensure_cmd nm-applet NetworkManager-gnome
-    ensure_cmd cliphist cliphist || true
-    ;;
-esac
+# --- wofi: force JetBrains Mono Nerd as primary font ---
+if [[ -f "$WOFI_STYLE" ]]; then
+  # Replace any font-family line with our preferred stack
+  sed -i 's/^\([[:space:]]*font-family:.*\)$/  font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", monospace, "Font Awesome 6 Free";/' "$WOFI_STYLE" || true
+fi
 
-# --- Install Bibata Modern Classic cursor (matches your config) ---
-msg "Installing cursor theme: $HYPRCURSOR_NAME ..."
+# --- Cursor theme installation and configuration ---
 mkdir -p "$CURSOR_DIR"
-if [[ ! -d "$CURSOR_DIR/$HYPRCURSOR_NAME" ]]; then
-  TMP_CUR="/tmp/${HYPRCURSOR_NAME}.tar.gz"
-  if wget -qO "$TMP_CUR" "https://github.com/ful1e5/Bibata_Cursor/releases/download/v2.0.0/${HYPRCURSOR_NAME}.tar.gz"; then
-    tar -xzf "$TMP_CUR" -C "$CURSOR_DIR"
-    msg "Cursor '$HYPRCURSOR_NAME' installed under $CURSOR_DIR."
-  else
-    warn "Failed to download ${HYPRCURSOR_NAME}. Consider installing via your package manager."
-  fi
-else
-  msg "Cursor '$HYPRCURSOR_NAME' already present, skipping."
+# If the repo package failed, try AUR bibata-cursor-theme-bin
+if [[ ! -d "$CURSOR_DIR/$HYPRCURSOR_NAME" && ! -d "/usr/share/icons/$HYPRCURSOR_NAME" ]]; then
+  "$AUR_HELPER" -S --needed --noconfirm bibata-cursor-theme-bin || true
 fi
 
-# --- Set cursor theme at the desktop level (best-effort) ---
+# GTK settings (best-effort)
+for gtkdir in "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"; do
+  mkdir -p "$gtkdir"
+  ini="$gtkdir/settings.ini"
+  touch "$ini"
+  if grep -q '^gtk-cursor-theme-name=' "$ini"; then
+    sed -i "s/^gtk-cursor-theme-name=.*/gtk-cursor-theme-name=$HYPRCURSOR_NAME/" "$ini"
+  else
+    echo "gtk-cursor-theme-name=$HYPRCURSOR_NAME" >> "$ini"
+  fi
+  if grep -q '^gtk-cursor-size=' "$ini"; then
+    sed -i "s/^gtk-cursor-size=.*/gtk-cursor-size=$HYPRCURSOR_SIZE/" "$ini"
+  else
+    echo "gtk-cursor-size=$HYPRCURSOR_SIZE" >> "$ini"
+  fi
+done
+
+# Hyprland env ensures cursor usage
+mkdir -p "$(dirname "$HYPR_CONF")" && touch "$HYPR_CONF"
+append_if_missing() {
+  local key="$1"; shift
+  local line="$1"
+  grep -q "^$key" "$HYPR_CONF" || echo "$line" >> "$HYPR_CONF"
+}
+append_if_missing 'env[[:space:]]*= HYPRCURSOR_THEME,' "env = HYPRCURSOR_THEME,$HYPRCURSOR_NAME"
+append_if_missing 'env[[:space:]]*= HYPRCURSOR_SIZE,'  "env = HYPRCURSOR_SIZE,$HYPRCURSOR_SIZE"
+append_if_missing 'env[[:space:]]*= XCURSOR_THEME,'     "env = XCURSOR_THEME,$HYPRCURSOR_NAME"
+append_if_missing 'env[[:space:]]*= XCURSOR_SIZE,'      "env = XCURSOR_SIZE,$HYPRCURSOR_SIZE"
+
+# GNOME (if present) for completeness
 if command -v gsettings &>/dev/null; then
   gsettings set org.gnome.desktop.interface cursor-theme "$HYPRCURSOR_NAME" 2>/dev/null || true
   gsettings set org.gnome.desktop.interface cursor-size "$HYPRCURSOR_SIZE" 2>/dev/null || true
 fi
-msg "Cursor theme configured for desktop (if supported)."
-
-# --- Configure Hyprland environment (only append if missing) ---
-if command -v hyprctl &>/dev/null; then
-  msg "Verifying Hyprland cursor env in $HYPR_CONF ..."
-  mkdir -p "$(dirname "$HYPR_CONF")"
-  touch "$HYPR_CONF"
-
-  if ! grep -q "^env[[:space:]]*=[[:space:]]*HYPRCURSOR_THEME," "$HYPR_CONF" 2>/dev/null; then
-    {
-      echo ""
-      echo "# --- Cursor settings (managed by install-hypr-dotfiles.sh) ---"
-      echo "env = HYPRCURSOR_THEME,$HYPRCURSOR_NAME"
-    } >> "$HYPR_CONF"
-    msg "Added HYPRCURSOR_THEME to Hyprland config."
-  fi
-
-  if ! grep -q "^env[[:space:]]*=[[:space:]]*HYPRCURSOR_SIZE," "$HYPR_CONF" 2>/dev/null; then
-    echo "env = HYPRCURSOR_SIZE,$HYPRCURSOR_SIZE" >> "$HYPR_CONF"
-    msg "Added HYPRCURSOR_SIZE to Hyprland config."
-  fi
-
-  if ! grep -q "^env[[:space:]]*=[[:space:]]*XCURSOR_THEME," "$HYPR_CONF" 2>/dev/null; then
-    echo "env = XCURSOR_THEME,$HYPRCURSOR_NAME" >> "$HYPR_CONF"
-    msg "Added XCURSOR_THEME to Hyprland config."
-  fi
-
-  if ! grep -q "^env[[:space:]]*=[[:space:]]*XCURSOR_SIZE," "$HYPR_CONF" 2>/dev/null; then
-    echo "env = XCURSOR_SIZE,$HYPRCURSOR_SIZE" >> "$HYPR_CONF"
-    msg "Added XCURSOR_SIZE to Hyprland config."
-  fi
-fi
 
 # --- Cleanup ---
-rm -rf "$TMP_DIR" "/tmp/${HYPRCURSOR_NAME}.tar.gz" 2>/dev/null || true
-msg "Temporary files cleaned."
+rm -rf "$TMP_DIR" || true
 
-# --- Done ---
-msg "✅ Setup complete. Log out/in or restart the compositor for cursor changes to fully apply."
+msg "Done. Reboot or restart Hyprland for all changes to take full effect."
