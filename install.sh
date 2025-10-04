@@ -92,20 +92,37 @@ case "$DISTRO" in
         ;;
     
     fedora)
-        # Enable RPM Fusion for extra packages
-        sudo dnf install -y \
-            https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
-            https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+        # Enable RPM Fusion for extra packages (check if already installed)
+        if ! rpm -q rpmfusion-free-release &>/dev/null; then
+            msg "Installing RPM Fusion free repository..."
+            sudo dnf install -y \
+                https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm || warn "RPM Fusion free already installed or failed"
+        fi
         
-        sudo dnf copr enable -y solopasha/hyprland
-        sudo dnf install -y \
+        if ! rpm -q rpmfusion-nonfree-release &>/dev/null; then
+            msg "Installing RPM Fusion nonfree repository..."
+            sudo dnf install -y \
+                https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm || warn "RPM Fusion nonfree already installed or failed"
+        fi
+        
+        # Enable Hyprland COPR only if not already enabled
+        if ! dnf copr list --enabled 2>/dev/null | grep -q "solopasha/hyprland"; then
+            msg "Enabling Hyprland COPR repository..."
+            sudo dnf copr enable -y solopasha/hyprland
+        else
+            msg "Hyprland COPR already enabled, skipping..."
+        fi
+        
+        # Install packages (using --skip-broken to handle already installed packages)
+        msg "Installing packages..."
+        sudo dnf install -y --skip-broken \
             hyprland waybar wofi kitty hyprpaper hyprlock hypridle \
             gdm nautilus fastfetch starship \
             zsh zsh-autosuggestions zsh-syntax-highlighting \
             cava mako jetbrains-mono-fonts-all papirus-icon-theme \
             pipewire pipewire-pulseaudio wireplumber \
             brightnessctl playerctl grim slurp wl-clipboard \
-            polkit-gnome xdg-desktop-portal-hyprland
+            polkit-gnome xdg-desktop-portal-hyprland || warn "Some packages may have failed to install"
         ;;
     
     void)
