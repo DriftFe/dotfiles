@@ -424,16 +424,37 @@ else
   err "Failed to clone dotfiles repository - cannot continue"
 fi
 
-# --- Copy local configs from script directory ---
+# --- Copy local configs and wallpapers from script directory ---
+msg "Copying local files from script directory..."
+
+# Copy .zshrc if present
 if [[ -f "$SCRIPT_DIR/.zshrc" ]]; then
   msg "Copying .zshrc from script directory..."
   cp -f "$SCRIPT_DIR/.zshrc" "$HOME/.zshrc"
 fi
 
+# Copy starship.toml if present
 if [[ -f "$SCRIPT_DIR/starship.toml" ]]; then
   msg "Copying starship.toml from script directory..."
   mkdir -p "$HOME/.config"
   cp -f "$SCRIPT_DIR/starship.toml" "$HOME/.config/starship.toml"
+fi
+
+# Copy wallpapers from script directory (dot_config/wallpapers -> ~/.wallpapers)
+if [[ -d "$SCRIPT_DIR/dot_config/wallpapers" ]]; then
+  msg "Copying wallpapers from $SCRIPT_DIR/dot_config/wallpapers to ~/.wallpapers..."
+  mkdir -p "$HOME/.wallpapers"
+  rsync -av "$SCRIPT_DIR/dot_config/wallpapers/" "$HOME/.wallpapers/" || warn "Failed to copy wallpapers from script directory"
+  msg "✓ Wallpapers copied to ~/.wallpapers"
+else
+  warn "No wallpapers found in $SCRIPT_DIR/dot_config/wallpapers"
+fi
+
+# Copy any other dot_config contents to ~/.config
+if [[ -d "$SCRIPT_DIR/dot_config" ]]; then
+  msg "Copying dot_config contents to ~/.config..."
+  mkdir -p "$HOME/.config"
+  rsync -av --exclude='wallpapers' "$SCRIPT_DIR/dot_config/" "$HOME/.config/" || warn "Failed to copy dot_config"
 fi
 
 # --- Make scripts executable ---
@@ -491,7 +512,7 @@ mkdir -p "$CURSOR_DIR"
 
 # Install from AUR if needed
 if [[ ! -d "$CURSOR_DIR/$HYPRCURSOR_NAME" ]] && [[ ! -d "/usr/share/icons/$HYPRCURSOR_NAME" ]]; then
-  "$AUR_HELPER" -S --needed --noconfirm bibata-cursor-theme-bin || err "Failed to install Bibata cursor theme"
+  "$AUR_HELPER" -S --needed --noconfirm bibata-cursor-theme-bin || warn "Failed to install Bibata cursor theme"
 fi
 
 # GTK cursor settings
@@ -631,7 +652,7 @@ if [[ ! -d "$HOME/.oh-my-zsh" ]]; then
   msg "Installing Oh My Zsh..."
   RUNZSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" || \
     git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git "$HOME/.oh-my-zsh" || \
-    err "Failed to install Oh My Zsh"
+    warn "Failed to install Oh My Zsh"
 fi
 
 # Install Powerlevel10k
@@ -640,7 +661,7 @@ mkdir -p "$ZSH_CUSTOM/themes"
 if [[ ! -d "$ZSH_CUSTOM/themes/powerlevel10k" ]]; then
   msg "Installing Powerlevel10k theme..."
   git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$ZSH_CUSTOM/themes/powerlevel10k" || \
-    err "Failed to install Powerlevel10k"
+    warn "Failed to install Powerlevel10k"
 fi
 
 # Install zsh-autosuggestions
@@ -648,7 +669,7 @@ mkdir -p "$HOME/.zsh"
 if [[ ! -d "$HOME/.zsh/zsh-autosuggestions" ]]; then
   msg "Installing zsh-autosuggestions..."
   git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions "$HOME/.zsh/zsh-autosuggestions" || \
-    err "Failed to install zsh-autosuggestions"
+    warn "Failed to install zsh-autosuggestions"
 fi
 
 # Set zsh as default shell
@@ -657,7 +678,7 @@ if command -v zsh &>/dev/null; then
   CURRENT_SHELL="$(getent passwd "$USER" | cut -d: -f7)"
   if [[ "$CURRENT_SHELL" != "$ZSH_PATH" ]]; then
     msg "Setting zsh as default shell..."
-    chsh -s "$ZSH_PATH" "$USER" || err "Failed to set zsh as default shell"
+    chsh -s "$ZSH_PATH" "$USER" || warn "Failed to set zsh as default shell. Run manually: chsh -s $ZSH_PATH"
   fi
 fi
 
