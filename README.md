@@ -96,10 +96,6 @@ The installer automatically handles most dependencies, but ensure you have:
 - **Git** - For cloning the repository
 - **Curl** - For one-line installation
 
-### Optional for GUI Mode:
-- **Zenity** (For graphical installation)
-- **X11 or Wayland session** - For GUI display
-
 ## Post-Installation
 
 1. **Reboot your system** for all changes to take effect
