@@ -3,7 +3,7 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 
 # ╔═══════════════════════════════════════════════════════════════╗
-# ║           Dotfiles Installer for Arch Linux                  ║
+# ║           Dotfiles Installer for Arch Linux                   ║
 # ╚═══════════════════════════════════════════════════════════════╝
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
