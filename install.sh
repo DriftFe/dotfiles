@@ -1,75 +1,3 @@
-set_hyprland_default() {
-  log "Configuring GDM to use Hyprland as default session"
-  local target_user="${SUDO_USER:-$USER}"
-  local accountsservice_file="/var/lib/AccountsService/users/$target_user"
-
-  if [[ ! -f "$accountsservice_file" ]]; then
-    if command -v sudo >/dev/null 2>&1; then
-      sudo mkdir -p "$(dirname "$accountsservice_file")"
-      sudo tee "$accountsservice_file" >/dev/null <<EOF
-[User]
-Session=hyprland
-XSession=hyprland
-SystemAccount=false
-EOF
-    else
-      mkdir -p "$(dirname "$accountsservice_file")"
-      tee "$accountsservice_file" >/dev/null <<EOF
-[User]
-Session=hyprland
-XSession=hyprland
-SystemAccount=false
-EOF
-    fi
-    success "Created AccountsService profile for $target_user"
-  else
-    if command -v sudo >/dev/null 2>&1; then
-      sudo sed -i '/^\[User\]/a Session=hyprland\nXSession=hyprland' "$accountsservice_file" 2>/dev/null || true
-      sudo sed -i 's/^Session=.*/Session=hyprland/' "$accountsservice_file" 2>/dev/null || true
-      sudo sed -i 's/^XSession=.*/XSession=hyprland/' "$accountsservice_file" 2>/dev/null || true
-    else
-      sed -i '/^\[User\]/a Session=hyprland\nXSession=hyprland' "$accountsservice_file" 2>/dev/null || true
-      sed -i 's/^Session=.*/Session=hyprland/' "$accountsservice_file" 2>/dev/null || true
-      sed -i 's/^XSession=.*/XSession=hyprland/' "$accountsservice_file" 2>/dev/null || true
-    fi
-    success "Updated AccountsService profile"
-  fi
-}
-
-enable_services() {
-  if ! command -v systemctl >/dev/null 2>&1; then
-    warn "systemctl not available; skipping service enablement."
-    return
-  fi
-
-  log "Enabling system services"
-  if command -v sudo >/dev/null 2>&1; then
-    sudo systemctl enable --now gdm.service NetworkManager.service bluetooth.service upower.service 2>/dev/null || true
-  else
-    systemctl enable --now gdm.service NetworkManager.service bluetooth.service upower.service 2>/dev/null || true
-  fi
-  success "System services enabled: GDM, NetworkManager, Bluetooth, UPower"
-
-  log "Enabling user services"
-  if [[ -n "${SUDO_USER:-}" && "$EUID" -eq 0 ]]; then
-    sudo -u "$SUDO_USER" systemctl --user enable --now \
-      pipewire.service \
-      pipewire-pulse.service \
-      wireplumber.service \
-      xdg-desktop-portal-hyprland.service \
-      xdg-desktop-portal.service \
-      touchegg.service 2>/dev/null || true
-  else
-    systemctl --user enable --now \
-      pipewire.service \
-      pipewire-pulse.service \
-      wireplumber.service \
-      xdg-desktop-portal-hyprland.service \
-      xdg-desktop-portal.service \
-      touchegg.service 2>/dev/null || true
-  fi
-  success "User services enabled: PipeWire, Portals, Touchegg"
-}
 #!/usr/bin/env bash
 set -Eeuo pipefail
 IFS=$'\n\t'
@@ -79,7 +7,7 @@ IFS=$'\n\t'
 # ╚═══════════════════════════════════════════════════════════════╝
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-SRC_DOTCONFIG="$HOME/dot_config"
+SRC_DOTCONFIG="$script_dir/dot_config"
 
 # Color codes for pretty output
 C_RESET='\033[0m'
@@ -215,10 +143,19 @@ copy_wallpapers() {
   fi
 }
 
-
 copy_dotconfig() {
   echo
   log "Deploying configuration files to $HOME/.config"
+  
+  # Verify source directory exists
+  if [[ ! -d "$SRC_DOTCONFIG" ]]; then
+    err "Source directory $SRC_DOTCONFIG does not exist!"
+  fi
+  
+  info "Source directory: $SRC_DOTCONFIG"
+  info "Listing contents:"
+  ls -la "$SRC_DOTCONFIG" || warn "Could not list source directory"
+  
   mkdir -p "$HOME/.config"
 
   local -a skip=(wallpapers)
@@ -226,25 +163,38 @@ copy_dotconfig() {
 
   shopt -s nullglob dotglob
   for entry in "$SRC_DOTCONFIG"/*; do
+    # Check if glob matched anything
+    if [[ ! -e "$entry" ]]; then
+      warn "No files found in $SRC_DOTCONFIG"
+      break
+    fi
+    
     local name
     name="$(basename "$entry")"
 
     # Skip filtered entries
+    local should_skip=0
     for s in "${skip[@]}"; do
       if [[ "$name" == "$s" ]]; then
-        continue 2
+        should_skip=1
+        break
       fi
     done
+    
+    if [[ $should_skip -eq 1 ]]; then
+      info "  ⊝ Skipping $name"
+      continue
+    fi
 
     local dest="$HOME/.config/$name"
     if [[ -d "$entry" ]]; then
       mkdir -p "$dest"
-      cp -a "$entry/." "$dest/"
-      info "  ├─ $name/"
+      cp -rf "$entry/." "$dest/"
+      info "  ├─ $name/ → ~/.config/$name/"
       ((copied++))
     else
-      cp -a "$entry" "$HOME/.config/"
-      info "  ├─ $name"
+      cp -f "$entry" "$HOME/.config/"
+      info "  ├─ $name → ~/.config/$name"
       ((copied++))
     fi
   done
@@ -252,16 +202,95 @@ copy_dotconfig() {
 
   # Copy files like .zshrc and starship.toml from repo root if present
   if [[ -f "$script_dir/.zshrc" ]]; then
-    cp -a "$script_dir/.zshrc" "$HOME/.zshrc"
+    cp -f "$script_dir/.zshrc" "$HOME/.zshrc"
     info "  └─ .zshrc → ~/"
     ((copied++))
   fi
   if [[ -f "$script_dir/starship.toml" ]]; then
-    cp -a "$script_dir/starship.toml" "$HOME/.config/starship.toml"
+    mkdir -p "$HOME/.config"
+    cp -f "$script_dir/starship.toml" "$HOME/.config/starship.toml"
     info "  └─ starship.toml → ~/.config/"
     ((copied++))
   fi
-  success "Deployed $copied configuration items"
+  
+  if [[ $copied -eq 0 ]]; then
+    warn "No files were copied! Check the source directory."
+  else
+    success "Deployed $copied configuration items"
+  fi
+}
+
+set_hyprland_default() {
+  log "Configuring GDM to use Hyprland as default session"
+  local target_user="${SUDO_USER:-$USER}"
+  local accountsservice_file="/var/lib/AccountsService/users/$target_user"
+
+  if [[ ! -f "$accountsservice_file" ]]; then
+    if command -v sudo >/dev/null 2>&1; then
+      sudo mkdir -p "$(dirname "$accountsservice_file")"
+      sudo tee "$accountsservice_file" >/dev/null <<EOF
+[User]
+Session=hyprland
+XSession=hyprland
+SystemAccount=false
+EOF
+    else
+      mkdir -p "$(dirname "$accountsservice_file")"
+      tee "$accountsservice_file" >/dev/null <<EOF
+[User]
+Session=hyprland
+XSession=hyprland
+SystemAccount=false
+EOF
+    fi
+    success "Created AccountsService profile for $target_user"
+  else
+    if command -v sudo >/dev/null 2>&1; then
+      sudo sed -i '/^\[User\]/a Session=hyprland\nXSession=hyprland' "$accountsservice_file" 2>/dev/null || true
+      sudo sed -i 's/^Session=.*/Session=hyprland/' "$accountsservice_file" 2>/dev/null || true
+      sudo sed -i 's/^XSession=.*/XSession=hyprland/' "$accountsservice_file" 2>/dev/null || true
+    else
+      sed -i '/^\[User\]/a Session=hyprland\nXSession=hyprland' "$accountsservice_file" 2>/dev/null || true
+      sed -i 's/^Session=.*/Session=hyprland/' "$accountsservice_file" 2>/dev/null || true
+      sed -i 's/^XSession=.*/XSession=hyprland/' "$accountsservice_file" 2>/dev/null || true
+    fi
+    success "Updated AccountsService profile"
+  fi
+}
+
+enable_services() {
+  if ! command -v systemctl >/dev/null 2>&1; then
+    warn "systemctl not available; skipping service enablement."
+    return
+  fi
+
+  log "Enabling system services"
+  if command -v sudo >/dev/null 2>&1; then
+    sudo systemctl enable --now gdm.service NetworkManager.service bluetooth.service upower.service 2>/dev/null || true
+  else
+    systemctl enable --now gdm.service NetworkManager.service bluetooth.service upower.service 2>/dev/null || true
+  fi
+  success "System services enabled: GDM, NetworkManager, Bluetooth, UPower"
+
+  log "Enabling user services"
+  if [[ -n "${SUDO_USER:-}" && "$EUID" -eq 0 ]]; then
+    sudo -u "$SUDO_USER" systemctl --user enable --now \
+      pipewire.service \
+      pipewire-pulse.service \
+      wireplumber.service \
+      xdg-desktop-portal-hyprland.service \
+      xdg-desktop-portal.service \
+      touchegg.service 2>/dev/null || true
+  else
+    systemctl --user enable --now \
+      pipewire.service \
+      pipewire-pulse.service \
+      wireplumber.service \
+      xdg-desktop-portal-hyprland.service \
+      xdg-desktop-portal.service \
+      touchegg.service 2>/dev/null || true
+  fi
+  success "User services enabled: PipeWire, Portals, Touchegg"
 }
 
 main() {
