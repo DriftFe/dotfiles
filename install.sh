@@ -2,9 +2,9 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-# ╔═══════════════════════════════════════════════════════════════════════╗
-# ║           Lavender Dotfiles Installer for Arch Linux                  ║
-# ╚═══════════════════════════════════════════════════════════════════════╝
+# ╔═══════════════════════════════════════════════════════════════╗
+# ║           Dotfiles Installer for Arch Linux                  ║
+# ╚═══════════════════════════════════════════════════════════════╝
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 SRC_DOTCONFIG="$script_dir/dot_config"
@@ -115,7 +115,7 @@ build_package_list() {
   pkgs+=(git curl wget)
 
   # Fonts (add more as needed)
-  pkgs+=(ttf-jetbrains-mono ttf-jetbrains-mono-nerd ttf-font-awesome ttf-nerd-fonts-symbols ttf-nerd-fonts-symbols-mono noto-fonts noto-fonts-emoji ttf-dejavu)
+  pkgs+=(ttf-jetbrains-mono ttf-jetbrains-mono-nerd ttf-font-awesome ttf-nerd-fonts-symbols ttf-nerd-fonts-symbols-mono noto-fonts noto-fonts-emoji ttf-dejavu ttf-roboto ttf-firacode-nerd)
 
   # Add more package detection logic here if needed
 
