@@ -79,7 +79,7 @@ IFS=$'\n\t'
 # ╚═══════════════════════════════════════════════════════════════╝
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-SRC_DOTCONFIG="$script_dir/dot_config"
+SRC_DOTCONFIG="$HOME/dot_config"
 
 # Color codes for pretty output
 C_RESET='\033[0m'
