@@ -1,319 +1,171 @@
 #!/usr/bin/env bash
+
 set -Eeuo pipefail
 IFS=$'\n\t'
 
 # ╔═══════════════════════════════════════════════════════════════╗
-# ║           Dotfiles Installer for Arch Linux                   ║
+# ║                 Dotfiles Installer for Arch Linux             ║
 # ╚═══════════════════════════════════════════════════════════════╝
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-SRC_DOTCONFIG="$script_dir/dot_config"
 
-# Color codes for pretty output
 C_RESET='\033[0m'
 C_GREEN='\033[0;32m'
 C_YELLOW='\033[1;33m'
 C_RED='\033[0;31m'
 C_CYAN='\033[0;36m'
 C_PURPLE='\033[0;35m'
-
 log() { echo -e "${C_PURPLE}[+]${C_RESET} $*"; }
 success() { echo -e "${C_GREEN}[✓]${C_RESET} $*"; }
 warn() { echo -e "${C_YELLOW}[!]${C_RESET} $*" >&2; }
 err() { echo -e "${C_RED}[✗]${C_RESET} $*" >&2; exit 1; }
 info() { echo -e "${C_CYAN}[i]${C_RESET} $*"; }
 
-require_arch() {
-  if ! command -v pacman >/dev/null 2>&1; then
-    err "This installer requires Arch Linux (pacman not found)."
-  fi
-}
+if ! command -v pacman >/dev/null 2>&1; then
+  err "This installer is Arch Linux only (requires pacman)."
+fi
 
-ensure_sudo() {
-  if command -v sudo >/dev/null 2>&1; then
-    if ! sudo -v; then
-      err "sudo authentication failed. Run this script with sufficient privileges."
-    fi
-    while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
-  else
-    if [[ $EUID -ne 0 ]]; then
-      err "sudo not found. Re-run as root (or install sudo)."
-    fi
-  fi
-}
+SRC_DOTCONFIG="$script_dir/dot_config"
+DEST_CONFIG="$HOME/.config"
 
-pac() {
-  if command -v sudo >/dev/null 2>&1; then sudo pacman "$@"; else pacman "$@"; fi
-}
+if [[ ! -d "$SRC_DOTCONFIG" ]]; then
+  err "Source dot_config directory not found: $SRC_DOTCONFIG"
+fi
 
-build_yay() {
-  local tmpdir
+log "Copying dotfiles from $SRC_DOTCONFIG to $DEST_CONFIG ..."
+mkdir -p "$DEST_CONFIG"
+# Ensure rsync is present before using it
+if ! command -v rsync >/dev/null 2>&1; then
+  info "Installing rsync ..."
+  sudo pacman -S --needed --noconfirm rsync
+fi
+rsync -avh --delete --mkpath "$SRC_DOTCONFIG"/ "$DEST_CONFIG"/
+
+# Packages  
+PACMAN_PACKAGES=(
+  git zsh rsync
+  kitty
+  hyprland hyprpaper waybar wofi
+  mako
+  wl-clipboard cliphist
+  brightnessctl
+  nautilus
+  pavucontrol blueman network-manager-applet
+  libnotify
+  touchegg
+  xsettingsd
+  noto-fonts ttf-inter ttf-roboto ttf-nerd-fonts-symbols ttf-font-awesome
+)
+
+AUR_PACKAGES=(
+  waypaper
+  gpu-screen-recorder
+  nerd-fonts-jetbrains-mono
+)
+
+log "Synchronizing pacman database and upgrading system ..."
+sudo pacman -Syu --noconfirm
+
+log "Installing packages with pacman ..."
+sudo pacman -S --needed --noconfirm "${PACMAN_PACKAGES[@]}"
+
+# Install yay if missing  
+if ! command -v yay >/dev/null 2>&1; then
+  log "Installing yay (AUR helper) ..."
+  sudo pacman -S --needed --noconfirm base-devel git
   tmpdir="$(mktemp -d)"
-  log "Bootstrapping yay from AUR in $tmpdir"
-  pushd "$tmpdir" >/dev/null
-  if git clone --depth=1 https://aur.archlinux.org/yay-bin.git >/dev/null 2>&1; then
-    cd yay-bin
+  trap 'rm -rf "$tmpdir"' EXIT
+  git clone https://aur.archlinux.org/yay.git "$tmpdir/yay"
+  (cd "$tmpdir/yay" && makepkg -si --noconfirm)
+fi
+
+log "Installing AUR packages with yay ..."
+yay -S --needed --noconfirm "${AUR_PACKAGES[@]}"
+
+# Enable and start services 
+if command -v systemctl >/dev/null 2>&1; then
+  log "Enabling core services ..."
+  # System services
+  if systemctl list-unit-files | grep -q '^NetworkManager.service'; then
+    sudo systemctl enable --now NetworkManager || true
+  fi
+  if systemctl list-unit-files | grep -q '^bluetooth.service'; then
+    sudo systemctl enable --now bluetooth || true
+  fi
+  # User services
+  systemctl --user enable --now touchegg.service || true
+  systemctl --user enable --now xsettingsd.service || true
+  # PipeWire (if applicable)
+  systemctl --user enable --now pipewire.service pipewire-pulse.service wireplumber.service || true
+fi
+
+# Ensure waybar helper scripts are executable if present  
+SCRIPT_DIRS=(
+  "$DEST_CONFIG/waybar/scripts"
+)
+for dir in "${SCRIPT_DIRS[@]}"; do
+  if [[ -d "$dir" ]]; then
+    info "Setting scripts executable in: $dir"
+    find "$dir" -type f -name "*.sh" -print0 | xargs -0 chmod +x || true
+  fi
+done
+
+# Make other common script locations executable  
+if [[ -d "$DEST_CONFIG/hypr/scripts" ]]; then
+  find "$DEST_CONFIG/hypr/scripts" -type f -name "*.sh" -print0 | xargs -0 chmod +x || true
+fi
+
+# Apply gtk dark preference 
+if command -v gsettings >/dev/null 2>&1; then
+  log "Applying GNOME dark color-scheme ..."
+  gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
+  gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark' || true
+fi
+
+# Zsh environment: Oh My Zsh, Powerlevel10k, autocorrect & plugins
+log "Configuring Zsh, Oh My Zsh, Powerlevel10k, and autocorrect"
+# Default shell to zsh
+if [[ "$(basename "$SHELL")" != "zsh" ]] && command -v chsh >/dev/null 2>&1; then
+  chsh -s /usr/bin/zsh "$USER" || warn "Failed to set zsh as default shell"
+fi
+# Oh My Zsh
+if [[ ! -d "$HOME/.oh-my-zsh" ]]; then
+  info "Installing Oh My Zsh"
+  RUNZSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" || warn "Oh My Zsh install failed"
+fi
+# Powerlevel10k theme: use system package if present, else clone into OMZ custom
+if pacman -Si --quiet zsh-theme-powerlevel10k >/dev/null 2>&1; then
+  sudo pacman -S --needed --noconfirm zsh-theme-powerlevel10k || true
+else
+  if [[ ! -d "$HOME/.oh-my-zsh/custom/themes/powerlevel10k" ]]; then
+    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$HOME/.oh-my-zsh/custom/themes/powerlevel10k" || true
+  fi
+fi
+# Plugins
+mkdir -p "$HOME/.oh-my-zsh/custom/plugins"
+[[ -d "$HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions" ]] || git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions "$HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions" || true
+[[ -d "$HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting" ]] || git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting "$HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting" || true
+[[ -d "$HOME/.oh-my-zsh/custom/plugins/zsh-autocomplete" ]] || git clone --depth=1 https://github.com/marlonrichert/zsh-autocomplete "$HOME/.oh-my-zsh/custom/plugins/zsh-autocomplete" || true
+
+# .zshrc adjustments (theme, plugins, autocorrect)
+if [[ -f "$HOME/.zshrc" ]]; then
+  sed -i 's/^ZSH_THEME=.*/ZSH_THEME="powerlevel10k\/powerlevel10k"/' "$HOME/.zshrc" || true
+  if grep -q '^plugins=' "$HOME/.zshrc"; then
+    sed -i 's/^plugins=.*/plugins=(git zsh-autosuggestions zsh-syntax-highlighting zsh-autocomplete correction)/' "$HOME/.zshrc" || true
   else
-    warn "Cloning yay-bin failed, trying yay"
-    git clone --depth=1 https://aur.archlinux.org/yay.git
-    cd yay
+    echo 'plugins=(git zsh-autosuggestions zsh-syntax-highlighting zsh-autocomplete correction)' >> "$HOME/.zshrc"
   fi
-  makepkg -si --noconfirm
-  popd >/dev/null
-  rm -rf "$tmpdir"
-  success "yay AUR helper installed"
-}
+  grep -q 'source ~/.p10k.zsh' "$HOME/.zshrc" || echo '[[ -r ~/.p10k.zsh ]] && source ~/.p10k.zsh' >> "$HOME/.zshrc"
+  grep -q '^setopt[[:space:]]\+CORRECT_ALL' "$HOME/.zshrc" || echo 'setopt CORRECT_ALL' >> "$HOME/.zshrc"
+else
+  cat > "$HOME/.zshrc" <<'RC'
+export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME="powerlevel10k/powerlevel10k"
+plugins=(git zsh-autosuggestions zsh-syntax-highlighting zsh-autocomplete correction)
+source $ZSH/oh-my-zsh.sh
+[[ -r ~/.p10k.zsh ]] && source ~/.p10k.zsh
+setopt CORRECT_ALL
+RC
+fi
 
-ensure_yay() {
-  if command -v yay >/dev/null 2>&1; then
-    return
-  fi
-  log "Installing prerequisites for AUR builds (base-devel, git)"
-  pac -S --needed --noconfirm base-devel git
-  build_yay
-}
-
-install_pkg() {
-  local pkg="$1"
-  if pacman -Si --quiet "$pkg" >/dev/null 2>&1; then
-    log "Installing (repo) $pkg"
-    pac -S --needed --noconfirm "$pkg"
-  else
-    aur_pkgs+=("$pkg")
-  fi
-}
-
-install_pkgs_auto() {
-  local -a pkgs=("$@")
-  local -a aur_to_install=()
-  aur_pkgs=()
-
-  echo
-  log "Processing ${#pkgs[@]} packages..."
-
-  for p in "${pkgs[@]}"; do
-    install_pkg "$p"
-  done
-
-  if ((${#aur_pkgs[@]} > 0)); then
-    echo
-    info "AUR packages detected: ${aur_pkgs[*]}"
-    ensure_yay
-    log "Installing ${#aur_pkgs[@]} AUR packages..."
-    yay -S --needed --noconfirm "${aur_pkgs[@]}"
-  fi
-
-  success "All packages installed successfully"
-}
-
-build_package_list() {
-  local -a pkgs=()
-
-  info "Detecting required packages from configuration..."
-
-  # Core utilities
-  pkgs+=(git curl wget)
-
-  # Fonts (add more as needed)
-  pkgs+=(ttf-jetbrains-mono ttf-jetbrains-mono-nerd ttf-font-awesome ttf-nerd-fonts-symbols ttf-nerd-fonts-symbols-mono noto-fonts noto-fonts-emoji ttf-dejavu ttf-roboto ttf-firacode-nerd)
-
-  # Add more package detection logic here if needed
-
-  declare -Ag seen=()
-  packages=()
-  for p in "${pkgs[@]}"; do
-    if [[ -z "${seen[$p]:-}" ]]; then
-      packages+=("$p")
-      seen[$p]=1
-    fi
-  done
-  success "Detected ${#packages[@]} packages to install"
-}
-
-copy_wallpapers() {
-  local wp_src="$SRC_DOTCONFIG/wallpapers"
-  if [[ -d "$wp_src" ]]; then
-    mkdir -p "$HOME/.wallpapers"
-    local count
-    count=$(find "$wp_src" -type f | wc -l)
-    cp -a "$wp_src/." "$HOME/.wallpapers/"
-    success "Copied $count wallpapers to ~/.wallpapers"
-  else
-    warn "No wallpapers directory found at $wp_src; skipping."
-  fi
-}
-
-copy_dotconfig() {
-  echo
-  log "Deploying configuration files to $HOME/.config"
-  
-  # Verify source directory exists
-  if [[ ! -d "$SRC_DOTCONFIG" ]]; then
-    err "Source directory $SRC_DOTCONFIG does not exist!"
-  fi
-  
-  info "Source directory: $SRC_DOTCONFIG"
-  info "Listing contents:"
-  ls -la "$SRC_DOTCONFIG" || warn "Could not list source directory"
-  
-  mkdir -p "$HOME/.config"
-
-  local -a skip=(wallpapers)
-  local copied=0
-
-  shopt -s nullglob dotglob
-  for entry in "$SRC_DOTCONFIG"/*; do
-    # Check if glob matched anything
-    if [[ ! -e "$entry" ]]; then
-      warn "No files found in $SRC_DOTCONFIG"
-      break
-    fi
-    
-    local name
-    name="$(basename "$entry")"
-
-    # Skip filtered entries
-    local should_skip=0
-    for s in "${skip[@]}"; do
-      if [[ "$name" == "$s" ]]; then
-        should_skip=1
-        break
-      fi
-    done
-    
-    if [[ $should_skip -eq 1 ]]; then
-      info "  ⊝ Skipping $name"
-      continue
-    fi
-
-    local dest="$HOME/.config/$name"
-    if [[ -d "$entry" ]]; then
-      mkdir -p "$dest"
-      cp -rf "$entry/." "$dest/"
-      info "  ├─ $name/ → ~/.config/$name/"
-      ((copied++))
-    else
-      cp -f "$entry" "$HOME/.config/"
-      info "  ├─ $name → ~/.config/$name"
-      ((copied++))
-    fi
-  done
-  shopt -u nullglob dotglob
-
-  # Copy files like .zshrc and starship.toml from repo root if present
-  if [[ -f "$script_dir/.zshrc" ]]; then
-    cp -f "$script_dir/.zshrc" "$HOME/.zshrc"
-    info "  └─ .zshrc → ~/"
-    ((copied++))
-  fi
-  if [[ -f "$script_dir/starship.toml" ]]; then
-    mkdir -p "$HOME/.config"
-    cp -f "$script_dir/starship.toml" "$HOME/.config/starship.toml"
-    info "  └─ starship.toml → ~/.config/"
-    ((copied++))
-  fi
-  
-  if [[ $copied -eq 0 ]]; then
-    warn "No files were copied! Check the source directory."
-  else
-    success "Deployed $copied configuration items"
-  fi
-}
-
-set_hyprland_default() {
-  log "Configuring GDM to use Hyprland as default session"
-  local target_user="${SUDO_USER:-$USER}"
-  local accountsservice_file="/var/lib/AccountsService/users/$target_user"
-
-  if [[ ! -f "$accountsservice_file" ]]; then
-    if command -v sudo >/dev/null 2>&1; then
-      sudo mkdir -p "$(dirname "$accountsservice_file")"
-      sudo tee "$accountsservice_file" >/dev/null <<EOF
-[User]
-Session=hyprland
-XSession=hyprland
-SystemAccount=false
-EOF
-    else
-      mkdir -p "$(dirname "$accountsservice_file")"
-      tee "$accountsservice_file" >/dev/null <<EOF
-[User]
-Session=hyprland
-XSession=hyprland
-SystemAccount=false
-EOF
-    fi
-    success "Created AccountsService profile for $target_user"
-  else
-    if command -v sudo >/dev/null 2>&1; then
-      sudo sed -i '/^\[User\]/a Session=hyprland\nXSession=hyprland' "$accountsservice_file" 2>/dev/null || true
-      sudo sed -i 's/^Session=.*/Session=hyprland/' "$accountsservice_file" 2>/dev/null || true
-      sudo sed -i 's/^XSession=.*/XSession=hyprland/' "$accountsservice_file" 2>/dev/null || true
-    else
-      sed -i '/^\[User\]/a Session=hyprland\nXSession=hyprland' "$accountsservice_file" 2>/dev/null || true
-      sed -i 's/^Session=.*/Session=hyprland/' "$accountsservice_file" 2>/dev/null || true
-      sed -i 's/^XSession=.*/XSession=hyprland/' "$accountsservice_file" 2>/dev/null || true
-    fi
-    success "Updated AccountsService profile"
-  fi
-}
-
-enable_services() {
-  if ! command -v systemctl >/dev/null 2>&1; then
-    warn "systemctl not available; skipping service enablement."
-    return
-  fi
-
-  log "Enabling system services"
-  if command -v sudo >/dev/null 2>&1; then
-    sudo systemctl enable --now gdm.service NetworkManager.service bluetooth.service upower.service 2>/dev/null || true
-  else
-    systemctl enable --now gdm.service NetworkManager.service bluetooth.service upower.service 2>/dev/null || true
-  fi
-  success "System services enabled: GDM, NetworkManager, Bluetooth, UPower"
-
-  log "Enabling user services"
-  if [[ -n "${SUDO_USER:-}" && "$EUID" -eq 0 ]]; then
-    sudo -u "$SUDO_USER" systemctl --user enable --now \
-      pipewire.service \
-      pipewire-pulse.service \
-      wireplumber.service \
-      xdg-desktop-portal-hyprland.service \
-      xdg-desktop-portal.service \
-      touchegg.service 2>/dev/null || true
-  else
-    systemctl --user enable --now \
-      pipewire.service \
-      pipewire-pulse.service \
-      wireplumber.service \
-      xdg-desktop-portal-hyprland.service \
-      xdg-desktop-portal.service \
-      touchegg.service 2>/dev/null || true
-  fi
-  success "User services enabled: PipeWire, Portals, Touchegg"
-}
-
-main() {
-  require_arch
-  ensure_sudo
-
-  echo
-  log "Updating system packages"
-  pac -Syu --noconfirm
-
-  build_package_list
-  if (((${#packages[@]} == 0))); then
-    warn "No packages detected; proceeding with configuration only."
-  else
-    install_pkgs_auto "${packages[@]}"
-  fi
-
-  copy_dotconfig
-  copy_wallpapers
-  set_hyprland_default
-  enable_services
-
-  success "Dotfiles installation complete!"
-}
-
-main "$@"
+success "Dotfiles installation complete on Arch Linux (pacman + AUR)."
