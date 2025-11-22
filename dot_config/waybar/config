@@ -58,13 +58,13 @@
   
 
   "battery": {
-    "format": "{capacity}% {icon}",
-    "format-charging": " {capacity}% {icon}",
+    "format": "{icon} {capacity}%",
+    "format-charging": " {capacity}%",
     "format-icons": ["", "", "", "", ""]
   },
 
   "pulseaudio": {
-    "format": "{volume}% {icon}",
+    "format": "{icon} {volume}%",
     "format-muted": "",
     "format-icons": {
       "headphones": "",

@@ -3,7 +3,7 @@ window#waybar {
   color: #fff;
   border: none;
   box-shadow: none;
-  font-family: "Roboto", "Font Awesome 6 Free", "Font Awesome 5 Free", "FiraCode Nerd Font", "JetBrains Mono", "sans-serif";
+  font-family: "Noto Sans", "Inter", "Roboto", sans-serif;
   font-size: 13px;
   margin: 0;
   padding: 0;
@@ -141,3 +141,18 @@ window#waybar {
     box-shadow: 0 0 8px rgba(203, 166, 247, 0.5);
   transition: background 0.2s ease, color 0.2s ease;
 }
+
+/* Use icon fallbacks only where needed to avoid layout issues */
+#clock,
+#bluetooth,
+#battery,
+#pulseaudio,
+#custom-brightness,
+#custom-recorder,
+#custom-keybinds,
+#tray,
+#workspaces,
+#hyprland-workspaces {
+  font-family: "Noto Sans", "Inter", "Roboto", "Symbols Nerd Font", "Symbols Nerd Font Mono", "Nerd Font Symbols", "Font Awesome 6 Free", "Font Awesome 5 Free", sans-serif;
+}
+
