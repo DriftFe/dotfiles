@@ -2,7 +2,7 @@ window {
   background-color: rgba(42, 24, 54, 0.92); /* deep violet, semi-transparent */
   border-radius: 16px;
   border: 2px solid #a78bfa;                /* soft purple border */
-  font-family: "Roboto", "Font Awesome 6 Free", "FiraCode Nerd Font", "JetBrains Mono", "sans-serif";
+  font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", "JetBrainsMono NF", monospace;
   color: #e0e0ff;
   box-shadow: 0 8px 32px 0 rgba(80, 60, 120, 0.35);
   padding: 0px;
