@@ -168,4 +168,4 @@ setopt CORRECT_ALL
 RC
 fi
 
-success "Dotfiles installation complete on Arch Linux (pacman + AUR)."
+success "Dotfiles installation complete on Arch Linux."
