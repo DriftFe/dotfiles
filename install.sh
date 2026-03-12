@@ -9,6 +9,10 @@ IFS=$'\n\t'
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
+REPO_URL="https://github.com/DriftFe/dotfiles.git"
+WORK_DIR=""
+TMP_DIR=""
+
 # Colors
 C_RESET='\033[0m'
 C_GREEN='\033[0;32m'
@@ -23,6 +27,22 @@ warn() { echo -e "${C_YELLOW}[!]${C_RESET} $*" >&2; }
 err() { echo -e "${C_RED}[✗]${C_RESET} $*" >&2; exit 1; }
 info() { echo -e "${C_CYAN}[i]${C_RESET} $*"; }
 
+cleanup() {
+  if [[ -n "$WORK_DIR" && -d "$WORK_DIR" ]]; then
+    rm -rf "$WORK_DIR"
+  fi
+
+  if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then
+    rm -rf "$TMP_DIR"
+  fi
+}
+
+trap cleanup EXIT
+
+if [[ $EUID -eq 0 ]]; then
+  err "Do not run this installer as root. Run it as your normal user."
+fi
+
 # Ensure Arch
 if ! command -v pacman >/dev/null 2>&1; then
   err "This installer supports Arch Linux only."
@@ -31,12 +51,26 @@ fi
 SRC_DOTCONFIG="$script_dir/dot_config"
 DEST_CONFIG="$HOME/.config"
 
-[[ -d "$SRC_DOTCONFIG" ]] || err "dot_config directory not found."
+if [[ ! -d "$SRC_DOTCONFIG" ]]; then
+  warn "dot_config directory not found next to install.sh."
+
+  if ! command -v git >/dev/null 2>&1; then
+    info "Installing git (required to fetch dotfiles)"
+    sudo pacman -S --needed --noconfirm git
+  fi
+
+  WORK_DIR="$(mktemp -d)"
+  info "Cloning dotfiles repository to temporary directory"
+  git clone --depth=1 "$REPO_URL" "$WORK_DIR/repo"
+
+  SRC_DOTCONFIG="$WORK_DIR/repo/dot_config"
+  [[ -d "$SRC_DOTCONFIG" ]] || err "dot_config directory not found in cloned repository."
+fi
 
 mkdir -p "$DEST_CONFIG"
 
 # Ensure rsync
-if ! command -v rsync >/dev/null; then
+if ! command -v rsync >/dev/null 2>&1; then
   info "Installing rsync"
   sudo pacman -S --needed --noconfirm rsync
 fi
@@ -80,28 +114,27 @@ log "Installing pacman packages..."
 sudo pacman -S --needed --noconfirm "${PACMAN_PACKAGES[@]}"
 
 # Install yay
-if ! command -v yay >/dev/null; then
+if ! command -v yay >/dev/null 2>&1; then
   log "Installing yay..."
 
   sudo pacman -S --needed --noconfirm base-devel git
 
-  tmpdir="$(mktemp -d)"
-  cleanup() { rm -rf "$tmpdir"; }
-  trap cleanup EXIT
+  TMP_DIR="$(mktemp -d)"
 
-  git clone https://aur.archlinux.org/yay.git "$tmpdir/yay"
+  git clone https://aur.archlinux.org/yay.git "$TMP_DIR/yay"
 
   (
-    cd "$tmpdir/yay"
+    cd "$TMP_DIR/yay"
     makepkg -si --noconfirm
   )
+
 fi
 
 log "Installing AUR packages..."
 yay -S --needed --noconfirm --answerclean All --answerdiff None "${AUR_PACKAGES[@]}"
 
 # Enable services
-if command -v systemctl >/dev/null; then
+if command -v systemctl >/dev/null 2>&1; then
 
   log "Enabling services..."
 
@@ -134,7 +167,7 @@ for dir in "${SCRIPT_DIRS[@]}"; do
 done
 
 # GNOME dark preference
-if command -v gsettings >/dev/null; then
+if command -v gsettings >/dev/null 2>&1; then
   log "Applying dark theme"
   gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
   gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark' || true
@@ -143,7 +176,7 @@ fi
 # Zsh setup
 log "Configuring Zsh environment"
 
-if command -v zsh >/dev/null; then
+if command -v zsh >/dev/null 2>&1; then
   if [[ "$SHELL" != "$(command -v zsh)" ]]; then
     chsh -s "$(command -v zsh)" "$USER" || warn "Could not change default shell"
   fi
@@ -168,61 +201,3 @@ fi
 
 # Zsh plugins
 mkdir -p "$HOME/.oh-my-zsh/custom/plugins"
-
-clone_plugin () {
-  local repo="$1"
-  local dest="$2"
-  [[ -d "$dest" ]] || git clone --depth=1 "$repo" "$dest"
-}
-
-clone_plugin https://github.com/zsh-users/zsh-autosuggestions \
-"$HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
-
-clone_plugin https://github.com/zsh-users/zsh-syntax-highlighting \
-"$HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
-
-clone_plugin https://github.com/marlonrichert/zsh-autocomplete \
-"$HOME/.oh-my-zsh/custom/plugins/zsh-autocomplete"
-
-# Configure .zshrc
-if [[ -f "$HOME/.zshrc" ]]; then
-
-  sed -i 's/^ZSH_THEME=.*/ZSH_THEME="powerlevel10k\/powerlevel10k"/' "$HOME/.zshrc" || true
-
-  if grep -q '^plugins=' "$HOME/.zshrc"; then
-    sed -i 's/^plugins=.*/plugins=(git zsh-autosuggestions zsh-autocomplete zsh-syntax-highlighting correction)/' "$HOME/.zshrc"
-  else
-    echo 'plugins=(git zsh-autosuggestions zsh-autocomplete zsh-syntax-highlighting correction)' >> "$HOME/.zshrc"
-  fi
-
-  grep -q 'source ~/.p10k.zsh' "$HOME/.zshrc" || \
-  echo '[[ -r ~/.p10k.zsh ]] && source ~/.p10k.zsh' >> "$HOME/.zshrc"
-
-  grep -q 'setopt CORRECT_ALL' "$HOME/.zshrc" || \
-  echo 'setopt CORRECT_ALL' >> "$HOME/.zshrc"
-
-else
-
-cat > "$HOME/.zshrc" <<'EOF'
-export ZSH="$HOME/.oh-my-zsh"
-
-ZSH_THEME="powerlevel10k/powerlevel10k"
-
-plugins=(
-git
-zsh-autosuggestions
-zsh-autocomplete
-zsh-syntax-highlighting
-correction
-)
-
-source $ZSH/oh-my-zsh.sh
-
-[[ -r ~/.p10k.zsh ]] && source ~/.p10k.zsh
-
-setopt CORRECT_ALL
-EOF
-
-fi
-
-success "Dotfiles installation completed successfully."
