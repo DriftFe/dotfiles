@@ -55,16 +55,6 @@ chmod +x install.sh
 ./install.sh
 ```
 
-### **Update** (`update.sh`)
-```bash
-./update.sh
-```
-
-### **Uninstall** (`uninstall.sh`)
-```bash
-./uninstall.sh
-```
-
 ## Customization
 
 ### **Wallpapers** (as of now, you have to replace the current wallpaper, because its hard-coded to only load wallpaper.png)
