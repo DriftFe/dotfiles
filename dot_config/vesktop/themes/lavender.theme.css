@@ -1,60 +1,105 @@
-/* =========================
-   JetBrains Mono Font
-========================= */
-
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap");
+/* Shine base theme */
+@import url(https://blade04208.github.io/shine/src/import.css);
 
 :root {
-    --font-primary: "JetBrains Mono", monospace;
-    --font-display: "JetBrains Mono", monospace;
+    --shine-gap: 8px;
+    --shine-radius: 12px;
+    --shine-base: default;
+    --shine-fog: true;
+    --shine-indicator: true;
+
+    /* Dark lavender palette */
+    --lavender-bg: #161320;
+    --lavender-surface: #1d1a2b;
+    --lavender-surface2: #242038;
+    --lavender-accent: #cba6f7;
 }
 
-/* =========================
-   Fix outer window rounding
-========================= */
-
+/* App background */
 .appMount-2yBXZl,
 .bg-1QIAus {
-    border-radius: 16px !important;
-    overflow: hidden !important;
+    background: var(--lavender-bg) !important;
 }
 
-/* =========================
-   Fix left server column
-========================= */
-
-.wrapper-1_HaEi {
-    border-top-left-radius: 16px !important;
-    border-bottom-left-radius: 16px !important;
-    overflow: hidden !important;
+/* Chat area */
+.chat-2ZfjoI,
+.container-ZMc96U {
+    background: var(--lavender-surface) !important;
 }
 
-/* =========================
-   Fix right edge rounding
-========================= */
-
-.container-1NXEtd,
-.baseLayer-W6S8cY {
-    border-top-right-radius: 16px !important;
-    border-bottom-right-radius: 16px !important;
-    overflow: hidden !important;
-}
-
-/* =========================
-   Remove sharp blur edges
-========================= */
-
+/* Left sidebar */
 .sidebar-1tnWFu,
-.container-1NXEtd,
-.chat-2ZfjoI {
-    backdrop-filter: blur(18px);
-    border-radius: 16px;
+.container-1NXEtd {
+    background: var(--lavender-surface) !important;
 }
 
-/* =========================
-   Better glass edge
-========================= */
+/* DM list */
+.privateChannels-oVe7HL,
+.scroller-WSmht3 {
+    background: var(--lavender-surface2) !important;
+}
 
-.appMount-2yBXZl {
-    border: 1px solid rgba(200,160,255,0.15);
+/* Server list */
+.wrapper-1_HaEi {
+    background: var(--lavender-bg) !important;
+}
+
+/* Selected channel */
+.selected-1Drb7Z {
+    background: var(--lavender-surface2) !important;
+}
+
+/* Hover highlight */
+.interactive-1vLZ_I:hover {
+    background: rgba(203,166,247,0.15) !important;
+}
+
+/* Search bar */
+.searchBar-3TnChZ {
+    background: var(--lavender-surface2) !important;
+}
+
+/* User panel bottom */
+.panels-3wFtMD {
+    background: var(--lavender-bg) !important;
+}
+
+/* Message box */
+.form-3gdLxP {
+    background: var(--lavender-surface) !important;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar-thumb {
+    background: var(--lavender-accent);
+    border-radius: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* -------- Mention / Ping Fix -------- */
+
+/* Pinged message highlight */
+.mentioned-Tre-dv {
+    background: rgba(203,166,247,0.18) !important;
+    border-left: 3px solid #cba6f7 !important;
+}
+
+/* Hover on ping */
+.mentioned-Tre-dv:hover {
+    background: rgba(203,166,247,0.28) !important;
+}
+
+/* @mention inside text */
+.wrapper-1ZcZW- {
+    background: rgba(203,166,247,0.25) !important;
+    color: #e5d6ff !important;
+}
+
+/* Mention badge */
+.mention {
+    background: rgba(203,166,247,0.3) !important;
+    color: #ffffff !important;
 }
