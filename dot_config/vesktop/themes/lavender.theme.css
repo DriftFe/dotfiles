@@ -8,11 +8,24 @@
     --shine-fog: true;
     --shine-indicator: true;
 
+    /* JetBrains Mono font */
+    --font-primary: "JetBrains Mono", monospace;
+    --font-display: "JetBrains Mono", monospace;
+    --font-headline: "JetBrains Mono", monospace;
+
     /* Dark lavender palette */
     --lavender-bg: #161320;
     --lavender-surface: #1d1a2b;
     --lavender-surface2: #242038;
     --lavender-accent: #cba6f7;
+}
+
+/* Force font everywhere */
+body,
+button,
+input,
+textarea {
+    font-family: "JetBrains Mono", monospace !important;
 }
 
 /* App background */
@@ -59,7 +72,7 @@
     background: var(--lavender-surface2) !important;
 }
 
-/* User panel bottom */
+/* User panel */
 .panels-3wFtMD {
     background: var(--lavender-bg) !important;
 }
@@ -81,24 +94,20 @@
 
 /* -------- Mention / Ping Fix -------- */
 
-/* Pinged message highlight */
 .mentioned-Tre-dv {
     background: rgba(203,166,247,0.18) !important;
     border-left: 3px solid #cba6f7 !important;
 }
 
-/* Hover on ping */
 .mentioned-Tre-dv:hover {
     background: rgba(203,166,247,0.28) !important;
 }
 
-/* @mention inside text */
 .wrapper-1ZcZW- {
     background: rgba(203,166,247,0.25) !important;
     color: #e5d6ff !important;
 }
 
-/* Mention badge */
 .mention {
     background: rgba(203,166,247,0.3) !important;
     color: #ffffff !important;
