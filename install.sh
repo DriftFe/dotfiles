@@ -106,7 +106,6 @@ PACMAN_PACKAGES=(
   unzip
   base-devel
   kitty
-  mpv
   hyprland
   swww
   waybar
@@ -295,10 +294,14 @@ for cmd in hyprland waybar wofi mako wl-copy wl-paste cliphist blueman-applet bl
   have_cmd "$cmd" || missing_commands+=("$cmd")
 done
 
-if (( ${#missing_commands[@]} > 0 )); then
+  if (( ${#missing_commands[@]} > 0 )); then
   warn "Some expected commands are still missing: ${missing_commands[*]}"
 else
   success "Core dotfile dependencies look good"
+fi
+
+if [[ ! -x /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 ]]; then
+  warn "polkit-gnome authentication agent is missing; some Bluetooth or privilege dialogs may not appear in Hyprland"
 fi
 
 echo ""
