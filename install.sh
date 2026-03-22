@@ -106,6 +106,7 @@ PACMAN_PACKAGES=(
   unzip
   base-devel
   kitty
+  mpv
   hyprland
   swww
   waybar
