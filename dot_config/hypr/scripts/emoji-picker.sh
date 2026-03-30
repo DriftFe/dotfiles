@@ -2,116 +2,57 @@
 
 set -euo pipefail
 
+emoji_list() {
+  python3 <<'PY'
+import unicodedata as u
+
+ranges = [
+    (0x1F600, 0x1F64F),  # Emoticons
+    (0x1F300, 0x1F5FF),  # Misc Symbols and Pictographs
+    (0x1F680, 0x1F6FF),  # Transport and Map
+    (0x1F900, 0x1F9FF),  # Supplemental Symbols and Pictographs
+    (0x1FA70, 0x1FAFF),  # Symbols and Pictographs Extended-A
+    (0x2600, 0x26FF),    # Misc symbols
+    (0x2700, 0x27BF),    # Dingbats
+]
+
+skip_terms = (
+    "CJK",
+    "IDEOGRAPH",
+    "VARIATION SELECTOR",
+    "TAG ",
+    "SURROGATE",
+)
+
+skip_codepoints = {
+    0x200D,  # ZERO WIDTH JOINER
+    0x20E3,  # COMBINING ENCLOSING KEYCAP
+    0xFE0E,  # text presentation selector
+    0xFE0F,  # emoji presentation selector
+}
+
+seen = set()
+
+for start, end in ranges:
+    for codepoint in range(start, end + 1):
+        if codepoint in skip_codepoints:
+            continue
+
+        char = chr(codepoint)
+        name = u.name(char, "")
+        if not name or any(term in name for term in skip_terms):
+            continue
+
+        if char in seen:
+            continue
+
+        seen.add(char)
+        print(f"{char} {name.lower()}")
+PY
+}
+
 choice="$(
-  cat <<'EOF' | wofi --dmenu --prompt 'Emoji' --insensitive
-😀 grinning face
-😃 smiling face
-😄 grinning eyes
-😁 beaming face
-😅 smiling sweat
-😂 tears of joy
-🤣 rolling on floor laughing
-🙂 slightly smiling face
-😉 winking face
-😊 smiling face with blush
-😍 heart eyes
-🥰 smiling hearts
-😘 blowing a kiss
-😋 yummy face
-😎 cool face
-🤩 star-struck
-🤔 thinking face
-🤨 raised eyebrow
-😐 neutral face
-😶 face without mouth
-🙄 rolling eyes
-😏 smirking face
-😴 sleeping face
-🤤 drooling face
-😭 loudly crying face
-😤 huffing face
-😡 angry face
-🤯 exploding head
-🥳 partying face
-😇 angel face
-🤗 hugging face
-🫡 saluting face
-🫠 melting face
-🤝 handshake
-🙏 folded hands
-💪 flexed biceps
-🫶 heart hands
-👏 clapping hands
-👍 thumbs up
-👎 thumbs down
-👌 OK hand
-✌ peace sign
-🤘 sign of the horns
-👀 eyes
-🫵 pointing at you
-❤️ red heart
-🩷 pink heart
-🧡 orange heart
-💛 yellow heart
-💚 green heart
-🩵 light blue heart
-💙 blue heart
-💜 purple heart
-🖤 black heart
-🤍 white heart
-🤎 brown heart
-💔 broken heart
-✨ sparkles
-🔥 fire
-⭐ star
-🌙 crescent moon
-☀ sun
-☁ cloud
-⚡ lightning
-🌈 rainbow
-❄ snowflake
-💥 collision
-💯 hundred points
-✔ check mark
-✖ cross mark
-✅ check box
-❌ cross mark button
-⚠ warning
-🚀 rocket
-🎉 party popper
-🎊 confetti ball
-🎵 musical note
-🎮 game controller
-💻 laptop
-⌨ keyboard
-🖱 mouse
-📱 phone
-📷 camera
-📌 pushpin
-📎 paperclip
-📝 memo
-📚 books
-🔒 locked
-🔓 unlocked
-🔑 key
-💡 light bulb
-🛠 hammer and wrench
-🧠 brain
-☕ hot beverage
-🍕 pizza
-🍔 burger
-🍟 fries
-🍜 ramen
-🍪 cookie
-🧋 bubble tea
-🐱 cat
-🐶 dog
-🦊 fox
-🐸 frog
-🌸 cherry blossom
-🌹 rose
-🍀 four leaf clover
-EOF
+  emoji_list | wofi --dmenu --prompt 'Emoji' --insensitive
 )"
 
 if [[ -z "${choice}" ]]; then
