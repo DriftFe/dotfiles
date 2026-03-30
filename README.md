@@ -9,7 +9,7 @@ An extremely minimal lavender themed hyprland setup with cool applications. Auto
 - **Waybar** 
 - **Wofi** 
 - **GDM** 
-- **Hyprpaper** 
+- **awww** 
 - **Hyprlock** 
 
 ### **Applications & Tools**
