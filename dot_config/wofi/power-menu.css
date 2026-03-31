@@ -1,0 +1,56 @@
+window {
+  background: rgba(22, 18, 36, 0.78);
+  border: 1px solid rgba(203, 166, 247, 0.7);
+  border-radius: 24px;
+  color: #f5eefe;
+  font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", "Noto Color Emoji", monospace;
+  box-shadow: 0 20px 60px rgba(14, 10, 22, 0.45);
+}
+
+#outer-box {
+  background: transparent;
+  border-radius: 24px;
+  padding: 18px;
+}
+
+#input {
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  border: none;
+  background: transparent;
+  color: transparent;
+}
+
+#prompt {
+  margin: 2px 0 14px 2px;
+  color: #cba6f7;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+#scroll {
+  background: transparent;
+  border-radius: 20px;
+}
+
+#entry {
+  margin: 6px 0;
+  padding: 14px 18px;
+  border-radius: 18px;
+  background: rgba(40, 32, 60, 0.55);
+  border: 1px solid transparent;
+  color: #f5eefe;
+  transition: 180ms ease;
+}
+
+#entry:selected {
+  background: linear-gradient(135deg, rgba(203, 166, 247, 0.95), rgba(180, 152, 255, 0.82));
+  color: #20172d;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+#text {
+  font-size: 15px;
+  font-weight: 600;
+}
