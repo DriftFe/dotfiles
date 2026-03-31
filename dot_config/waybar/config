@@ -12,7 +12,7 @@
     "custom/brightness",
     "custom/recorder",
     "custom/keybinds",
-    "custom/quickshell",
+    "custom/power",
     "tray"
   ],
 
@@ -100,6 +100,13 @@
   "tooltip": "Show Hyprland Keybinds",
   "on-click": "~/.config/waybar/scripts/show-keybinds.sh",
   "interval": 3600
+  },
+
+  "custom/power": {
+    "format": "",
+    "tooltip": "Power Menu",
+    "on-click": "~/.config/waybar/scripts/power-menu.sh",
+    "interval": 3600
   },
 
 
