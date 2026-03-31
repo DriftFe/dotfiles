@@ -121,6 +121,7 @@ PACMAN_PACKAGES=(
   awww
   hyprlock
   waybar
+  wlogout
   wofi
   mako
   libnotify
@@ -307,7 +308,7 @@ fi
 
 log "Validating core commands used by the dotfiles..."
 missing_commands=()
-for cmd in hyprland waybar wofi mako wl-copy wl-paste cliphist blueman-applet bluetoothctl \
+for cmd in hyprland waybar wlogout wofi mako wl-copy wl-paste cliphist blueman-applet bluetoothctl \
   udisksctl playerctl hyprpicker grimblast swappy awww-daemon dolphin hyprlock; do
   have_cmd "$cmd" || missing_commands+=("$cmd")
 done
