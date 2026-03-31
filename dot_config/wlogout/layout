@@ -1,0 +1,25 @@
+{
+  "label" : "lock",
+  "action" : "hyprlock",
+  "text" : "Lock"
+}
+{
+  "label" : "suspend",
+  "action" : "sh -c 'hyprlock & sleep 0.2; systemctl suspend'",
+  "text" : "Suspend"
+}
+{
+  "label" : "logout",
+  "action" : "hyprctl dispatch exit",
+  "text" : "Log Out"
+}
+{
+  "label" : "reboot",
+  "action" : "systemctl reboot",
+  "text" : "Restart"
+}
+{
+  "label" : "shutdown",
+  "action" : "systemctl poweroff",
+  "text" : "Power Off"
+}
