@@ -50,6 +50,17 @@ enable_system_service() {
   fi
 }
 
+disable_system_service_if_enabled() {
+  local unit="$1"
+
+  if systemctl list-unit-files --type=service | awk '{print $1}' | grep -Fxq "$unit"; then
+    if systemctl is-enabled "$unit" >/dev/null 2>&1; then
+      sudo systemctl disable "$unit"
+      success "Disabled $unit"
+    fi
+  fi
+}
+
 enable_user_service() {
   local unit="$1"
 
@@ -107,7 +118,8 @@ PACMAN_PACKAGES=(
   base-devel
   kitty
   hyprland
-  swww
+  awww
+  hyprlock
   waybar
   wofi
   mako
@@ -117,7 +129,7 @@ PACMAN_PACKAGES=(
   brightnessctl
   grim
   slurp
-  nautilus
+  dolphin
   networkmanager
   network-manager-applet
   pipewire
@@ -128,6 +140,7 @@ PACMAN_PACKAGES=(
   bluez
   bluez-utils
   blueman
+  sddm
   touchegg
   xsettingsd
   qt5ct
@@ -151,6 +164,7 @@ AUR_PACKAGES=(
   waypaper
   vesktop-bin
   zen-browser-bin
+  ttf-meslo-nerd-font-powerlevel10k
   gpu-screen-recorder
   nerd-fonts-jetbrains-mono
   grimblast-git
@@ -190,7 +204,15 @@ fi
 log "Enabling system services..."
 enable_system_service "NetworkManager.service"
 enable_system_service "bluetooth.service"
+enable_system_service "sddm.service"
 enable_system_service "touchegg.service"
+disable_system_service_if_enabled "gdm.service"
+disable_system_service_if_enabled "lightdm.service"
+
+log "Creating swww compatibility symlinks for Waypaper..."
+sudo ln -sf /usr/bin/awww /usr/bin/swww
+sudo ln -sf /usr/bin/awww-daemon /usr/bin/swww-daemon
+success "Waypaper compatibility symlinks are in place"
 
 log "Enabling user services..."
 systemctl --user disable --now pulseaudio.service pulseaudio.socket 2>/dev/null || true
@@ -242,13 +264,9 @@ if [[ ! -d "$HOME/.oh-my-zsh" ]]; then
 fi
 
 log "Installing Powerlevel10k..."
-if pacman -Si zsh-theme-powerlevel10k >/dev/null 2>&1; then
-  sudo pacman -S --needed --noconfirm zsh-theme-powerlevel10k
-else
-  P10K_DIR="$HOME/.oh-my-zsh/custom/themes/powerlevel10k"
-  if [[ ! -d "$P10K_DIR" ]]; then
-    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$P10K_DIR"
-  fi
+P10K_DIR="$HOME/.oh-my-zsh/custom/themes/powerlevel10k"
+if [[ ! -d "$P10K_DIR" ]]; then
+  git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$P10K_DIR"
 fi
 
 if [[ -f "$ZSHRC" ]]; then
@@ -269,18 +287,18 @@ if [[ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ]]; then
     "$ZSH_CUSTOM/plugins/zsh-autosuggestions"
 fi
 
-if [[ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ]]; then
-  info "Installing zsh-syntax-highlighting..."
-  git clone https://github.com/zsh-users/zsh-syntax-highlighting \
-    "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting"
-fi
-
 if [[ -f "$ZSHRC" ]]; then
   if grep -q '^plugins=' "$ZSHRC"; then
-    sed -i 's/^plugins=.*/plugins=(git zsh-autosuggestions zsh-syntax-highlighting)/' "$ZSHRC"
+    sed -i 's/^plugins=.*/plugins=(git zsh-autosuggestions)/' "$ZSHRC"
   else
-    ensure_line_in_file "$ZSHRC" 'plugins=(git zsh-autosuggestions zsh-syntax-highlighting)'
+    ensure_line_in_file "$ZSHRC" 'plugins=(git zsh-autosuggestions)'
   fi
+fi
+
+if have_cmd xdg-mime; then
+  log "Setting Dolphin as the default file manager..."
+  xdg-mime default org.kde.dolphin.desktop inode/directory || true
+  xdg-mime default org.kde.dolphin.desktop application/x-gnome-saved-search || true
 fi
 
 if have_cmd xdg-user-dirs-update; then
@@ -290,7 +308,7 @@ fi
 log "Validating core commands used by the dotfiles..."
 missing_commands=()
 for cmd in hyprland waybar wofi mako wl-copy wl-paste cliphist blueman-applet bluetoothctl \
-  udisksctl playerctl hyprpicker grimblast swappy swww-daemon; do
+  udisksctl playerctl hyprpicker grimblast swappy awww-daemon dolphin hyprlock; do
   have_cmd "$cmd" || missing_commands+=("$cmd")
 done
 
@@ -307,4 +325,9 @@ fi
 echo ""
 success "Installation complete!"
 info "Reboot or log out and back in so shell, services, and desktop changes fully apply."
-info "After reboot, run 'p10k configure' once to finish your prompt setup."
+if [[ -t 0 && -t 1 ]] && have_cmd zsh; then
+  info "Launching an interactive zsh so Powerlevel10k can finish setup..."
+  zsh -ic 'source ~/.zshrc' || true
+else
+  info "Open a new zsh session or run 'source ~/.zshrc' to launch the Powerlevel10k wizard."
+fi
