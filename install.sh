@@ -61,6 +61,86 @@ disable_system_service_if_enabled() {
   fi
 }
 
+prompt_gpu_driver_packages() {
+  GPU_PACKAGES=()
+  GPU_DRIVER_LABEL="No extra GPU driver packages"
+
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    info "Non-interactive session detected; skipping GPU driver selection."
+    return 0
+  fi
+
+  echo ""
+  info "Choose the graphics driver stack to install:"
+  echo "  1) AMD"
+  echo "  2) Intel"
+  echo "  3) NVIDIA (proprietary)"
+  echo "  4) Virtual machine / software rendering"
+  echo "  5) Skip extra GPU drivers"
+
+  while true; do
+    read -r -p "Enter your choice [1-5]: " gpu_choice
+
+    case "$gpu_choice" in
+      1)
+        GPU_DRIVER_LABEL="AMD"
+        GPU_PACKAGES=(
+          mesa
+          lib32-mesa
+          vulkan-radeon
+          lib32-vulkan-radeon
+          xf86-video-amdgpu
+        )
+        break
+        ;;
+      2)
+        GPU_DRIVER_LABEL="Intel"
+        GPU_PACKAGES=(
+          mesa
+          lib32-mesa
+          vulkan-intel
+          lib32-vulkan-intel
+          xf86-video-intel
+        )
+        break
+        ;;
+      3)
+        GPU_DRIVER_LABEL="NVIDIA"
+        GPU_PACKAGES=(
+          nvidia
+          nvidia-utils
+          lib32-nvidia-utils
+          nvidia-settings
+        )
+        break
+        ;;
+      4)
+        GPU_DRIVER_LABEL="Virtual machine / software rendering"
+        GPU_PACKAGES=(
+          mesa
+          lib32-mesa
+          vulkan-swrast
+          lib32-vulkan-swrast
+        )
+        break
+        ;;
+      5)
+        break
+        ;;
+      *)
+        warn "Invalid selection. Please choose a number from 1 to 5."
+        ;;
+    esac
+  done
+
+  if (( ${#GPU_PACKAGES[@]} > 0 )); then
+    success "Selected GPU driver set: $GPU_DRIVER_LABEL"
+    info "GPU packages: ${GPU_PACKAGES[*]}"
+  else
+    info "Skipping extra GPU driver packages."
+  fi
+}
+
 enable_user_service() {
   local unit="$1"
 
@@ -179,8 +259,10 @@ AUR_PACKAGES=(
 log "Updating system..."
 sudo pacman -Syu --noconfirm
 
+prompt_gpu_driver_packages
+
 log "Installing pacman packages..."
-sudo pacman -S --needed --noconfirm "${PACMAN_PACKAGES[@]}"
+sudo pacman -S --needed --noconfirm "${PACMAN_PACKAGES[@]}" "${GPU_PACKAGES[@]}"
 
 mkdir -p "$DEST_CONFIG"
 
