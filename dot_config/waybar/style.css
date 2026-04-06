@@ -131,6 +131,16 @@ window#waybar {
   color: #fff;
 }
 
+#custom-signal-radar {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: 8px 6px 0 2px;
+  color: #fff;
+  border: none;
+  box-shadow: none;
+}
+
 #custom-power {
   background: rgba(24, 16, 36, 0.55);
   border-radius: 6px;
@@ -144,6 +154,7 @@ window#waybar {
 }
 /* --- Hover effect for all modules --- */
 #bluetooth:hover,
+#custom-signal-radar:hover,
 #pulseaudio:hover,
 #tray:hover,
 #custom-recorder:hover,
@@ -158,6 +169,7 @@ window#waybar {
 /* Use icon fallbacks only where needed to avoid layout issues */
 #clock,
 #bluetooth,
+#custom-signal-radar,
 #battery,
 #pulseaudio,
 #custom-brightness,
