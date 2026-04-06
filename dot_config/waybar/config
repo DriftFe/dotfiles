@@ -5,6 +5,7 @@
   "modules-left": ["hyprland/workspaces"],
   "modules-center": ["clock"],
   "modules-right": [
+    "custom/signal-radar",
     "custom/wifi-icon",
     "bluetooth",
     "battery",
@@ -15,6 +16,13 @@
     "custom/power",
     "tray"
   ],
+
+  "custom/signal-radar": {
+    "format": "󰑓",
+    "tooltip": "Open signal radar",
+    "on-click": "~/.config/hypr/scripts/toggle-signal-radar.sh",
+    "interval": 3600
+  },
 
   "hyprland/workspaces": {
     "disable-scroll": false,
