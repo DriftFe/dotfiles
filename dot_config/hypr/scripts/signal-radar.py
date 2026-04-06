@@ -52,6 +52,8 @@ class SignalRadarWindow(Gtk.ApplicationWindow):
         self.detail_reveal_timeout_id = 0
         self.action_token = 0
         self.hovered_point_id = None
+        self.radar_zoom = 1.0
+        self.radar_zoom_target = 1.0
 
         self._build_ui()
         self._apply_css()
@@ -90,18 +92,22 @@ class SignalRadarWindow(Gtk.ApplicationWindow):
         subtitle.set_wrap(True)
         subtitle.set_halign(Gtk.Align.START)
         subtitle.add_css_class("subtitle")
+        hero_copy.set_hexpand(True)
         hero_copy.append(eyebrow)
         hero_copy.append(title)
         hero_copy.append(subtitle)
 
         top_controls = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         top_controls.add_css_class("hero-side")
+        top_controls.set_halign(Gtk.Align.END)
+        top_controls.set_valign(Gtk.Align.START)
 
         self.status_chip = Gtk.Label(label="Idle")
-        self.status_chip.set_halign(Gtk.Align.START)
+        self.status_chip.set_halign(Gtk.Align.CENTER)
         self.status_chip.add_css_class("status-chip")
 
         control_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        control_row.set_halign(Gtk.Align.CENTER)
         self.scan_button = Gtk.Button(label="Scan now")
         self.scan_button.connect("clicked", lambda *_: self.refresh_scan())
         self.scan_button.add_css_class("primary-button")
@@ -117,10 +123,10 @@ class SignalRadarWindow(Gtk.ApplicationWindow):
         self.status_meta.set_wrap(True)
         self.status_meta.set_halign(Gtk.Align.START)
         self.status_meta.add_css_class("status-meta")
+        self.status_meta.set_visible(False)
 
         top_controls.append(self.status_chip)
         top_controls.append(control_row)
-        top_controls.append(self.status_meta)
 
         header.append(hero_copy)
         header.append(top_controls)
@@ -178,6 +184,9 @@ class SignalRadarWindow(Gtk.ApplicationWindow):
         motion.connect("motion", self._on_radar_motion)
         motion.connect("leave", self._on_radar_leave)
         self.drawing.add_controller(motion)
+        scroll_zoom = Gtk.EventControllerScroll.new(Gtk.EventControllerScrollFlags.VERTICAL)
+        scroll_zoom.connect("scroll", self._on_radar_scroll)
+        self.drawing.add_controller(scroll_zoom)
 
         legend = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         legend.set_halign(Gtk.Align.CENTER)
@@ -192,7 +201,7 @@ class SignalRadarWindow(Gtk.ApplicationWindow):
         self.scan_meta.add_css_class("caption")
 
         note = Gtk.Label(
-            label="Placement is relative and collision-resolved. It scales with signal strength but is not a real-world map."
+            label="Placement is relative and collision-resolved. Scroll on the radar to zoom smoothly."
         )
         note.set_wrap(True)
         note.set_halign(Gtk.Align.START)
@@ -360,6 +369,7 @@ class SignalRadarWindow(Gtk.ApplicationWindow):
         }
         .hero-side {
           min-width: 280px;
+          margin-left: auto;
         }
         .panel {
           padding: 16px;
@@ -577,6 +587,10 @@ class SignalRadarWindow(Gtk.ApplicationWindow):
         widget.add_controller(gesture)
 
     def _tick(self):
+        if abs(self.radar_zoom - self.radar_zoom_target) > 0.001:
+            self.radar_zoom += (self.radar_zoom_target - self.radar_zoom) * 0.18
+            if abs(self.radar_zoom - self.radar_zoom_target) < 0.001:
+                self.radar_zoom = self.radar_zoom_target
         if self.scan_phase == "sweeping":
             progress = min(1.0, (time.time() - self.scan_started_at) / self.SWEEP_SECONDS)
             self.sweep_angle = progress * math.tau
@@ -872,14 +886,20 @@ class SignalRadarWindow(Gtk.ApplicationWindow):
     def _empty_state(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         box.add_css_class("empty-state")
+        box.set_hexpand(True)
         title = Gtk.Label(label="No visible targets" if self.scan_phase == "sweeping" else "Nothing scanned yet")
         title.set_halign(Gtk.Align.START)
+        title.set_wrap(True)
+        title.set_xalign(0)
+        title.set_hexpand(True)
         title.add_css_class("device-name")
         body = Gtk.Label(
             label="The sweep is still moving." if self.scan_phase == "sweeping" else "Press Scan now to fetch nearby devices."
         )
         body.set_wrap(True)
         body.set_halign(Gtk.Align.START)
+        body.set_xalign(0)
+        body.set_hexpand(True)
         body.add_css_class("caption")
         box.append(title)
         box.append(body)
@@ -1142,6 +1162,16 @@ class SignalRadarWindow(Gtk.ApplicationWindow):
             self.hovered_point_id = None
             self.drawing.queue_draw()
 
+    def _on_radar_scroll(self, _controller, _dx, dy):
+        step = 0.12
+        if dy > 0:
+            self.radar_zoom_target = max(0.75, self.radar_zoom_target - step)
+        elif dy < 0:
+            self.radar_zoom_target = min(2.2, self.radar_zoom_target + step)
+        self.scan_meta.set_text(f"Radar zoom {self.radar_zoom_target:.2f}x")
+        self.drawing.queue_draw()
+        return True
+
     def _strength_label(self, signal):
         if signal >= 80:
             return "Excellent"
@@ -1153,7 +1183,8 @@ class SignalRadarWindow(Gtk.ApplicationWindow):
 
     def _draw_radar(self, _area, cr, width, height):
         size = min(width, height)
-        radius = size / 2 - 26
+        radius = (size / 2 - 26) * self.radar_zoom
+        radius = min(radius, size * 0.78)
         cx = width / 2
         cy = height / 2
         self.point_hits = []
