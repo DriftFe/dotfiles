@@ -201,7 +201,7 @@ class SignalRadarWindow(Gtk.ApplicationWindow):
         self.scan_meta.add_css_class("caption")
 
         note = Gtk.Label(
-            label="Placement is relative and collision-resolved. Scroll on the radar to zoom smoothly."
+            label="You can scroll to zoom.. if.. thats smth u wanna try... idk"
         )
         note.set_wrap(True)
         note.set_halign(Gtk.Align.START)
