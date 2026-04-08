@@ -221,7 +221,7 @@ PACMAN_PACKAGES=(
   bluez
   bluez-utils
   blueman
-  sddm
+  gdm
   touchegg
   xsettingsd
   qt5ct
@@ -287,9 +287,9 @@ fi
 log "Enabling system services..."
 enable_system_service "NetworkManager.service"
 enable_system_service "bluetooth.service"
-enable_system_service "sddm.service"
+enable_system_service "gdm.service"
 enable_system_service "touchegg.service"
-disable_system_service_if_enabled "gdm.service"
+disable_system_service_if_enabled "sddm.service"
 disable_system_service_if_enabled "lightdm.service"
 
 log "Creating swww compatibility symlinks for Waypaper..."
