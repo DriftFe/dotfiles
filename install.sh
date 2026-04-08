@@ -61,6 +61,27 @@ disable_system_service_if_enabled() {
   fi
 }
 
+set_default_gdm_session() {
+  local session="$1"
+  local dmrc="$HOME/.dmrc"
+  local tmp_file=""
+
+  printf '[Desktop]\nSession=%s\n' "$session" > "$dmrc"
+  chmod 644 "$dmrc"
+  success "Set $session as the default desktop session in $dmrc"
+
+  if [[ -d /var/lib/AccountsService ]] || have_cmd accounts-daemon; then
+    tmp_file="$(mktemp)"
+    printf '[User]\nSession=%s\nSessionType=wayland\n' "$session" > "$tmp_file"
+    sudo install -d -m755 /var/lib/AccountsService/users
+    sudo install -m644 "$tmp_file" "/var/lib/AccountsService/users/$USER"
+    rm -f "$tmp_file"
+    success "Configured AccountsService to default to $session for $USER"
+  else
+    warn "AccountsService not detected; wrote $dmrc only"
+  fi
+}
+
 prompt_gpu_driver_packages() {
   GPU_PACKAGES=()
   GPU_DRIVER_LABEL="No extra GPU driver packages"
@@ -222,6 +243,12 @@ PACMAN_PACKAGES=(
   bluez-utils
   blueman
   gdm
+  gnome-session
+  gnome-shell
+  gnome-desktop-4
+  gsettings-desktop-schemas
+  gsettings-system-schemas
+  mutter
   touchegg
   xsettingsd
   qt5ct
@@ -264,6 +291,9 @@ prompt_gpu_driver_packages
 log "Installing pacman packages..."
 sudo pacman -S --needed --noconfirm "${PACMAN_PACKAGES[@]}" "${GPU_PACKAGES[@]}"
 
+log "Rebuilding GSettings schemas..."
+sudo glib-compile-schemas /usr/share/glib-2.0/schemas
+
 mkdir -p "$DEST_CONFIG"
 
 log "Copying dotfiles into $DEST_CONFIG..."
@@ -291,6 +321,7 @@ enable_system_service "gdm.service"
 enable_system_service "touchegg.service"
 disable_system_service_if_enabled "sddm.service"
 disable_system_service_if_enabled "lightdm.service"
+set_default_gdm_session "hyprland"
 
 log "Creating swww compatibility symlinks for Waypaper..."
 sudo ln -sf /usr/bin/awww /usr/bin/swww
