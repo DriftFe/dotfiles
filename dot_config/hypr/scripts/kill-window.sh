@@ -3,7 +3,10 @@
 set -u
 
 notify() {
-  notify-send -a "Hyprland" "$@"
+  notify-send \
+    -a "Hyprland" \
+    -h string:x-canonical-private-synchronous:hypr-kill-window \
+    "$@"
 }
 
 socket2="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/${HYPRLAND_INSTANCE_SIGNATURE:-}/.socket2.sock"
@@ -23,9 +26,31 @@ trap cleanup EXIT
 
 notify "Kill window" "Select the window to close"
 
-if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" && -S "$socket2" ]] && command -v socat >/dev/null 2>&1; then
-  timeout 30s socat -u "UNIX-CONNECT:$socket2" - \
-    | awk -F'>>' '$1 == "closewindow" { print $2; exit }' >"$event_file" &
+if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" && -S "$socket2" ]] && command -v python3 >/dev/null 2>&1; then
+  timeout 30s python3 - "$socket2" >"$event_file" <<'PY' &
+import socket
+import sys
+
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+sock.connect(sys.argv[1])
+
+buffer = ""
+
+while True:
+    chunk = sock.recv(4096)
+    if not chunk:
+        break
+
+    buffer += chunk.decode("utf-8", errors="replace")
+
+    while "\n" in buffer:
+        line, buffer = buffer.split("\n", 1)
+        if line.startswith("closewindow>>"):
+            print(line.split(">>", 1)[1])
+            sys.exit(0)
+
+sys.exit(1)
+PY
   listener_pid=$!
 
   # Give the event listener a moment to connect before entering kill mode.
