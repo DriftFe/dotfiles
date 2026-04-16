@@ -10,6 +10,8 @@ WORK_DIR=""
 TMP_DIR=""
 FAILED_PACMAN_PACKAGES=()
 FAILED_AUR_PACKAGES=()
+CPU_PACKAGES=()
+GPU_PACKAGES=()
 FORCE_CONFIG_OVERRIDES="${FORCE_CONFIG_OVERRIDES:-0}"
 
 C_RESET='\033[0m'
@@ -18,6 +20,23 @@ C_YELLOW='\033[1;33m'
 C_RED='\033[0;31m'
 C_CYAN='\033[0;36m'
 C_PURPLE='\033[0;35m'
+C_PINK='\033[1;95m'
+
+print_banner() {
+  echo -e "${C_PINK}"
+  cat <<'EOF'
+┌──────────────────────────────────────────────┐
+│          Lavender Dotfiles Installer         │
+│        soft setup, slightly dramatic >~<     │
+└──────────────────────────────────────────────┘
+EOF
+  echo -e "${C_RESET}"
+}
+
+section() {
+  echo ""
+  echo -e "${C_CYAN}==>${C_RESET} ${C_PINK}$*${C_RESET}"
+}
 
 log()     { echo -e "${C_PURPLE}[+]${C_RESET} $*"; }
 success() { echo -e "${C_GREEN}[✓]${C_RESET} $*"; }
@@ -114,6 +133,62 @@ multilib_enabled() {
   ' /etc/pacman.conf
 }
 
+prompt_cpu_driver_packages() {
+  CPU_PACKAGES=()
+  CPU_DRIVER_LABEL="No extra CPU microcode packages"
+
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    info "Non-interactive session detected; skipping CPU driver selection."
+    return 0
+  fi
+
+  echo ""
+  info "Choose the CPU support packages you want:"
+  echo "  1) AMD"
+  echo "  2) Intel"
+  echo "  3) Virtual machine / generic"
+  echo "  4) Skip extra CPU packages"
+
+  while true; do
+    read -r -p "Enter your choice [1-4]: " cpu_choice
+
+    case "$cpu_choice" in
+      1)
+        CPU_DRIVER_LABEL="AMD"
+        CPU_PACKAGES=(
+          amd-ucode
+        )
+        break
+        ;;
+      2)
+        CPU_DRIVER_LABEL="Intel"
+        CPU_PACKAGES=(
+          intel-ucode
+        )
+        break
+        ;;
+      3)
+        CPU_DRIVER_LABEL="Virtual machine / generic"
+        CPU_PACKAGES=()
+        break
+        ;;
+      4)
+        break
+        ;;
+      *)
+        warn "Invalid selection. Please choose a number from 1 to 4."
+        ;;
+    esac
+  done
+
+  if (( ${#CPU_PACKAGES[@]} > 0 )); then
+    success "Selected CPU package set: $CPU_DRIVER_LABEL"
+    info "CPU packages: ${CPU_PACKAGES[*]}"
+  else
+    info "Skipping extra CPU packages."
+  fi
+}
+
 prompt_gpu_driver_packages() {
   GPU_PACKAGES=()
   GPU_DRIVER_LABEL="No extra GPU driver packages"
@@ -131,7 +206,7 @@ prompt_gpu_driver_packages() {
   fi
 
   echo ""
-  info "Choose the graphics driver stack to install:"
+  info "Choose the graphics driver stack you want:"
   echo "  1) AMD"
   echo "  2) Intel"
   echo "  3) NVIDIA"
@@ -389,12 +464,15 @@ print_package_failure_summary() {
 
 trap cleanup EXIT
 
+print_banner
+
 if [[ $EUID -eq 0 ]]; then
   err "Do not run this installer as root. Run it as your normal user."
 fi
 
 have_cmd pacman || err "This installer supports Arch Linux only."
 
+section "Getting ready"
 log "Refreshing sudo credentials..."
 sudo -v
 
@@ -504,14 +582,19 @@ AUR_PACKAGES=(
   cbonsai
 )
 
+section "System update"
 log "Updating system..."
 sudo pacman -Syu --noconfirm
 
+section "Hardware setup"
+prompt_cpu_driver_packages
 prompt_gpu_driver_packages
 
+section "Pacman packages"
 log "Installing pacman packages..."
-install_pacman_packages "${PACMAN_PACKAGES[@]}" "${GPU_PACKAGES[@]}"
+install_pacman_packages "${PACMAN_PACKAGES[@]}" "${CPU_PACKAGES[@]}" "${GPU_PACKAGES[@]}"
 
+section "Schemas and configs"
 log "Rebuilding GSettings schemas..."
 sudo glib-compile-schemas /usr/share/glib-2.0/schemas
 
@@ -524,7 +607,8 @@ log "Installing font fallback preferences..."
 install_font_fallback_config
 
 if ! have_cmd yay; then
-  log "Installing yay (AUR helper)..."
+  section "AUR helper"
+  log "Installing yay..."
   TMP_DIR="$(mktemp -d)"
   git clone https://aur.archlinux.org/yay.git "$TMP_DIR/yay"
   (
@@ -534,10 +618,12 @@ if ! have_cmd yay; then
 fi
 
 if (( ${#AUR_PACKAGES[@]} > 0 )); then
+  section "AUR packages"
   log "Installing AUR packages..."
   install_aur_packages "${AUR_PACKAGES[@]}"
 fi
 
+section "System services"
 log "Enabling system services..."
 enable_system_service "NetworkManager.service"
 enable_system_service "bluetooth.service"
@@ -553,6 +639,7 @@ sudo ln -sf /usr/bin/awww /usr/bin/swww
 sudo ln -sf /usr/bin/awww-daemon /usr/bin/swww-daemon
 success "Waypaper compatibility symlinks are in place"
 
+section "User services"
 log "Enabling user services..."
 systemctl --user disable --now pulseaudio.service pulseaudio.socket 2>/dev/null || true
 systemctl --user mask pulseaudio.service pulseaudio.socket 2>/dev/null || true
@@ -565,6 +652,7 @@ enable_user_service "xdg-desktop-portal.service"
 enable_user_service "xdg-desktop-portal-hyprland.service"
 print_package_failure_summary
 
+section "Permissions"
 log "Setting executable permissions on scripts..."
 SCRIPT_DIRS=(
   "$DEST_CONFIG/waybar/scripts"
@@ -577,6 +665,8 @@ for dir in "${SCRIPT_DIRS[@]}"; do
   if [[ -d "$dir" ]]; then
     info "chmod +x on *.sh in $dir"
     find "$dir" -type f -name "*.sh" -exec chmod +x {} +
+    info "chmod +x on *.py in $dir"
+    find "$dir" -type f -name "*.py" -exec chmod +x {} +
   fi
 done
 
@@ -584,6 +674,7 @@ chmod +x "$script_dir/install.sh" 2>/dev/null || true
 
 if have_cmd gsettings; then
   if config_overrides_enabled; then
+    section "Theme defaults"
     log "Applying GTK theme and cursor defaults..."
     gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
     gsettings set org.gnome.desktop.interface gtk-theme 'adw-gtk3-dark' || true
@@ -598,6 +689,7 @@ fi
 mkdir -p "$HOME/Pictures/Screenshots"
 success "Ensured ~/Pictures/Screenshots exists"
 
+section "Zsh setup"
 log "Configuring Zsh..."
 if have_cmd zsh && [[ "$SHELL" != "$(command -v zsh)" ]]; then
   chsh -s "$(command -v zsh)" "$USER" || warn "Could not change default shell to zsh"
@@ -650,6 +742,7 @@ if [[ -f "$ZSHRC" ]]; then
   fi
 fi
 
+section "Desktop defaults"
 if have_cmd xdg-mime; then
   if config_overrides_enabled; then
     log "Setting Dolphin as the default file manager..."
@@ -669,6 +762,7 @@ if have_cmd fc-cache; then
   fc-cache -f
 fi
 
+section "Validation"
 log "Validating core commands used by the dotfiles..."
 missing_commands=()
 for cmd in hyprland waybar wlogout wofi mako wl-copy wl-paste cliphist blueman-applet bluetoothctl \
@@ -676,7 +770,7 @@ for cmd in hyprland waybar wlogout wofi mako wl-copy wl-paste cliphist blueman-a
   have_cmd "$cmd" || missing_commands+=("$cmd")
 done
 
-  if (( ${#missing_commands[@]} > 0 )); then
+if (( ${#missing_commands[@]} > 0 )); then
   warn "Some expected commands are still missing: ${missing_commands[*]}"
 else
   success "Core dotfile dependencies look good"
@@ -692,6 +786,12 @@ if config_overrides_enabled; then
   info "Applied config overrides because FORCE_CONFIG_OVERRIDES=1 was set."
 else
   info "Safe update mode kept existing config files and defaults in place."
+fi
+if (( ${#CPU_PACKAGES[@]} > 0 )); then
+  info "CPU package choice: ${CPU_DRIVER_LABEL:-custom}"
+fi
+if (( ${#GPU_PACKAGES[@]} > 0 )); then
+  info "GPU package choice: ${GPU_DRIVER_LABEL:-custom}"
 fi
 info "Reboot or log out and back in so shell, services, and desktop changes fully apply."
 if [[ -t 0 && -t 1 ]] && have_cmd zsh; then
