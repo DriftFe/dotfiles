@@ -66,7 +66,7 @@ handle_event() {
 
   if [[ -n "$mountpoint" ]]; then
     notify-send "USB ready" "$title mounted at $mountpoint"
-    choice="$(printf 'Open\nIgnore\n' | wofi --dmenu --prompt "USB: $title")"
+    choice="$(printf 'Open\nIgnore\n' | wofi --dmenu --prompt "USB: $title" --hide-scroll)"
     if [[ "$choice" == "Open" ]]; then
       open_path "$mountpoint"
     fi
@@ -74,7 +74,7 @@ handle_event() {
   fi
 
   notify-send "USB connected" "$title detected"
-  choice="$(printf 'Mount and open\nMount only\nIgnore\n' | wofi --dmenu --prompt "USB: $title")"
+  choice="$(printf 'Mount and open\nMount only\nIgnore\n' | wofi --dmenu --prompt "USB: $title" --hide-scroll)"
 
   case "$choice" in
     "Mount and open"|"Mount only")

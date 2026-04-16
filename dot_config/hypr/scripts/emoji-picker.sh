@@ -52,7 +52,7 @@ PY
 }
 
 choice="$(
-  emoji_list | wofi --dmenu --prompt 'Emoji' --insensitive
+  emoji_list | wofi --dmenu --prompt 'search' --insensitive --hide-scroll
 )"
 
 if [[ -z "${choice}" ]]; then
