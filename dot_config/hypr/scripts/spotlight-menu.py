@@ -110,7 +110,6 @@ def show_menu(options: list[str]) -> str:
         [
             "wofi",
             "--dmenu",
-            "--exec-search",
             "--insensitive",
             "--prompt",
             "search",
