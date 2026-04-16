@@ -1,7 +1,7 @@
 # lavender dotfiles ♡
 omg hi!! this is my soft lavender hyprland setup for arch linux >~< it's got a glassy look, a custom wofi launcher, and a bunch of actually useful daily apps and scripts that i use!! hope u like it as much as i do hehe
 
-![Preview](https://www.dropbox.com/scl/fi/vd78noq20sxr20193b7li/image.webp?rlkey=x0lm1eaa3b7y74n3mlpqa64b5&st=b74g2c35&raw=1)
+![Preview](https://i.postimg.cc/fbGdCT7N/swappy-20260416-123111.png)
 
 ## what's inside ♡
 ### window manager & desktop stuff
