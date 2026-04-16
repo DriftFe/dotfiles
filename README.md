@@ -1,46 +1,68 @@
 # Lavender Dotfiles
 
-An extremely minimal lavender themed hyprland setup with cool applications. Automated installation and management for Arch Linux.
+A soft lavender Hyprland setup for Arch Linux with a glassy look, a custom Wofi launcher, and a bunch of actually useful daily apps and scripts >~<
 
-## Stuff Included
+## Included
 
-### **Window Manager & Desktop**
-- **Hyprland** (obv)
-- **Waybar** 
-- **Wofi** 
-- **GDM** 
-- **awww** 
-- **Hyprlock** 
+### Window Manager & Desktop
+- Hyprland
+- Waybar
+- Wofi
+- GDM
+- awww
+- Hyprlock
+- Mako
 
-### **Applications & Tools**
-- **Kitty** 
-- **Goonsh** (cuz.. why not)
-- **Nautilus** 
-- **VSCode** 
-- **Spotify** 
-- **Vesktop** 
-- **Zen Browser** 
+### Applications & Tools
+- Kitty
+- Dolphin
+- VS Code
+- Spotify
+- Vesktop
+- Zen Browser
+- Kdenlive
 
-### **Customization & Theming**
-- **Starship** 
-- **Oh My Zsh** 
-- **Cava** 
-- **CBonsai** 
+### Shell & Visuals
+- Zsh
+- Oh My Zsh
+- Starship
+- Cava
+- CBonsai
 
-### **Utilities**
-- **GPU Screen Recorder** 
-- **Grimblast** 
-- **Swappy** 
-- **Fastfetch**
+### Utilities
+- Cliphist
+- Grimblast
+- Swappy
+- Hyprpicker
+- Fastfetch
+- Waypaper
+- Touchegg
+
+## Features
+
+- Lavender/pink Hyprland styling
+- Custom Spotlight-ish Wofi app launcher
+- Clipboard history picker on `Super + V`
+- Emoji picker on `Super + .`
+- USB popup actions through Wofi
+- Screenshot workflow with Grimblast + Swappy
+- Scratchpad / special workspace support
+- Animated borders and blur because flat desktops are boring >:(
 
 ## Installation
 
-### One-Line Installation
+### One-Line Install
+
+If you trust me a little too much:
+
 ```bash
 curl -sSL https://raw.githubusercontent.com/DriftFe/dotfiles/main/install.sh | bash
 ```
 
-### Manual Installation
+### Manual Install
+
+If you want to look at what is happening first, which is fair >_<
+
 ```bash
 git clone https://github.com/DriftFe/dotfiles.git
 cd dotfiles
@@ -48,92 +70,119 @@ chmod +x install.sh
 ./install.sh
 ```
 
-## Management Scripts
+## Management
 
-### **Install** (`install.sh`)
+### Install Script
+
 ```bash
 ./install.sh
 ```
 
+## Keybinds
+
+### Core
+
+- `Super + A` - Open app launcher
+- `Super + T` - Open Kitty
+- `Super + E` - Open Dolphin
+- `Super + B` - Open Zen Browser
+- `Super + C` - Open VS Code
+- `Super + D` - Open Vesktop
+- `Super + Ctrl + S` - Open Spotify
+- `Super + L` - Lock screen
+- `Super + M` - Exit Hyprland
+
+### Window Management
+
+- `Super + Q` - Close active window
+- `Super + Shift + Q` - Kill selected window
+- `Super + W` - Toggle floating
+- `Super + J` - Toggle split layout
+- `Super + Arrow Keys` - Move focus
+- `Alt + Arrow Keys` - Move windows
+
+### Utilities
+
+- `Super + V` - Clipboard history
+- `Super + .` - Emoji picker
+- `Alt + S` - Area screenshot to clipboard, then edit
+- `Ctrl + Alt + S` - Area screenshot to file
+- `Print` - Fullscreen screenshot to file
+- `Alt + W` - Random wallpaper
+
 ## Customization
 
-### **Wallpapers** (as of now, you have to replace the current wallpaper, because its hard-coded to only load wallpaper.png)
-Place custom wallpapers in `~/.wallpapers/` and update
+### Hyprland
 
-### **Keybindings**
-Modify Hyprland keybindings in:
+Tweak Hyprland settings and keybinds here:
+
 ```bash
+vim ~/.config/hypr/hyprland.conf
 vim ~/.config/hypr/keys.conf
 ```
 
-### **Shell Configuration**
-Customize your shell experience:
+### Wofi
+
+Customize launcher styling:
+
 ```bash
-# Edit Zsh config
+vim ~/.config/wofi/style.css
+```
+
+### Shell
+
+```bash
 vim ~/.zshrc
-
-# Powerlevel10k prompt
-p10k configure
-
-# Starship prompt
 vim ~/.config/starship.toml
 ```
 
+### Wallpapers
+
+Wallpaper restore is currently tied to the existing setup through Waypaper, so if you want your own look you will probably want to swap that around a bit.
+
 ## Prerequisites
 
-The installer automatically handles most dependencies, but ensure you have:
+The installer should handle most of it, but having these ready helps:
 
-- **Git** - For cloning the repository
-- **Curl** - For one-line installation
+- Git
+- Curl
+- base-devel
 
-## Post-Installation
+## Post-Install
 
-1. **Reboot your system** for all changes to take effect
-2. **Log in with GDM** - Hyprland will be the default session
-3. **Launch applications:**
-   - `Super + A` - Open Wofi launcher
-   - `Super + T` - Open Kitty terminal
-   - `Super + Q` - Close window
-   - `Super + M` - Exit Hyprland
-
-4. **Customize to your liking** using the configuration files
+1. Reboot the system.
+2. Log in through GDM.
+3. Launch Hyprland.
+4. Press `Super + A` and make sure the launcher opens like it should.
+5. Mess with `~/.config/hypr/keys.conf` and `~/.config/wofi/style.css` until it feels like yours >:3
 
 ## Troubleshooting
 
-### Common Issues
-**No Permission:**
-```bash
-chmod +x [script].sh
-```
+### Hyprland Won't Start
 
-**Hyprland won't start:**
 ```bash
-# Check if session file exists
 ls /usr/share/wayland-sessions/hyprland.desktop
-
-# Manually create if missing
 sudo cp /usr/share/hyprland/hyprland.desktop /usr/share/wayland-sessions/
 ```
 
-**Missing packages on Arch:**
-```bash
-# Install yay if not present
-sudo pacman -S --needed base-devel git
-git clone https://aur.archlinux.org/yay.git
-cd yay && makepkg -si
-```
+### Waybar Not Showing
 
-**Waybar not showing:**
 ```bash
-# Restart waybar
 pkill waybar
 waybar &
 ```
 
-**Dotfiles not applied:**
+### Scripts Not Executing
+
 ```bash
-# Manually sync configurations
+chmod +x ~/.config/hypr/scripts/*.sh
+chmod +x ~/.config/hypr/scripts/*.py
+```
+
+### Dotfiles Not Applying
+
+```bash
 rsync -av dot_config/ ~/.config/
 ```
 
-ty for reading, ur amazing :3
+ty for reading, hope u like the setup <3
