@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import subprocess
-import sys
 
 
 MAX_LABEL_LENGTH = 92
@@ -77,8 +76,7 @@ def main() -> int:
 
     decoded = subprocess.run(
         ["cliphist", "decode"],
-        input=original,
-        text=True,
+        input=original.encode(),
         capture_output=True,
         check=False,
     )
@@ -88,7 +86,6 @@ def main() -> int:
     copied = subprocess.run(
         ["wl-copy"],
         input=decoded.stdout,
-        text=True,
         check=False,
     )
     return copied.returncode
