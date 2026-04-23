@@ -73,7 +73,8 @@ window {
 }
 
 #img {
-  margin-right: 10px;
+  margin-left: -2px;
+  margin-right: 8px;
   border-radius: 6px;
   padding: 0;
 }
