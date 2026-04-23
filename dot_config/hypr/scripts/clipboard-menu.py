@@ -3,18 +3,20 @@
 import hashlib
 import re
 import subprocess
-import tempfile
 import time
 from pathlib import Path
 
 
 MAX_LABEL_LENGTH = 92
+MAX_MENU_ENTRIES = 250
+MAX_IMAGE_PREVIEWS = 60
+WOFI_IMAGE_MODE = "img"
+WOFI_TEXT_MODE = "text"
+CACHE_DIR = Path.home() / ".cache" / "clipboard-menu"
 IMAGE_ENTRY_RE = re.compile(
     r"^\[\[ binary data (?P<size>.+?) (?P<kind>png|jpg|jpeg|webp|gif|bmp) (?P<dims>\d+x\d+) \]\]$",
     flags=re.IGNORECASE,
 )
-WOFI_IMAGE_MODE = "img"
-WOFI_TEXT_MODE = "text"
 
 
 def shorten(text: str) -> str:
@@ -44,11 +46,6 @@ def split_entry(entry: str) -> tuple[str | None, str]:
     return None, entry
 
 
-def image_match(entry: str) -> re.Match[str] | None:
-    _, payload = split_entry(entry)
-    return IMAGE_ENTRY_RE.match(payload)
-
-
 def entry_id(entry: str) -> str | None:
     return split_entry(entry)[0]
 
@@ -65,7 +62,7 @@ def preview_label(entry: str) -> str:
     size = match.group("size")
     dims = match.group("dims")
     prefix = f"{entry_id}  " if entry_id is not None else ""
-    return f"{prefix}Image  {dims}  {size}  {kind}"
+    return f"{prefix}{dims}  {size}  {kind}"
 
 
 def decode_entry(entry: str) -> bytes | None:
@@ -80,14 +77,19 @@ def decode_entry(entry: str) -> bytes | None:
     return decoded.stdout
 
 
-def thumbnail_path(root: Path, entry: str) -> Path:
+def image_match(entry: str) -> re.Match[str] | None:
+    _, payload = split_entry(entry)
+    return IMAGE_ENTRY_RE.match(payload)
+
+
+def thumbnail_path(entry: str) -> Path:
     digest = hashlib.sha256(entry.encode()).hexdigest()
     suffix = ".png"
     match = image_match(entry)
     if match is not None:
         kind = match.group("kind").lower()
         suffix = ".jpg" if kind == "jpeg" else f".{kind}"
-    return root / f"{digest}{suffix}"
+    return CACHE_DIR / f"{digest}{suffix}"
 
 
 def menu_row(label: str, icon_path: Path | None) -> str:
@@ -144,70 +146,74 @@ def main() -> int:
     if not lines:
         return 0
 
-    with tempfile.TemporaryDirectory(prefix="clipboard-menu-") as temp_dir:
-        temp_root = Path(temp_dir)
-        display_to_full: dict[str, str] = {}
-        used: set[str] = set()
-        displays: list[str] = []
+    display_to_full: dict[str, str] = {}
+    used: set[str] = set()
+    displays: list[str] = []
+    preview_images_left = MAX_IMAGE_PREVIEWS
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-        for line in lines:
-            display = unique_display(preview_label(line), used)
-            icon_path = None
+    for line in lines[:MAX_MENU_ENTRIES]:
+        display = unique_display(preview_label(line), used)
+        icon_path: Path | None = None
 
-            if image_match(line) is not None:
+        if preview_images_left > 0 and image_match(line) is not None:
+            cached_thumbnail = thumbnail_path(line)
+            if not cached_thumbnail.exists():
                 image_bytes = decode_entry(line)
                 if image_bytes:
-                    icon_path = thumbnail_path(temp_root, line)
-                    icon_path.write_bytes(image_bytes)
+                    cached_thumbnail.write_bytes(image_bytes)
+            if cached_thumbnail.exists():
+                icon_path = cached_thumbnail
+                preview_images_left -= 1
 
-            display_to_full[display] = line
-            displays.append(menu_row(display, icon_path))
+        display_to_full[display] = line
+        displays.append(menu_row(display, icon_path))
 
-        menu = subprocess.run(
-            [
-                "wofi",
-                "--dmenu",
-                "--prompt",
-                "search",
-                "--insensitive",
-                "--hide-scroll",
-                "--cache-file",
-                "/dev/null",
-                "--allow-images",
-                "--parse-search",
-                "-D",
-                "dmenu-parse_action=true",
-                "-D",
-                "image_size=48",
-            ],
-            input="\n".join(displays),
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        if menu.returncode != 0:
-            return 0
+    menu = subprocess.run(
+        [
+            "wofi",
+            "--dmenu",
+            "--prompt",
+            "search",
+            "--insensitive",
+            "--hide-scroll",
+            "--cache-file",
+            "/dev/null",
+            "--allow-images",
+            "--parse-search",
+            "-D",
+            "dmenu-parse_action=true",
+            "-D",
+            "image_size=48",
+        ],
+        input="\n".join(displays),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if menu.returncode != 0:
+        return 0
 
-        selection = menu.stdout.strip()
-        if not selection:
-            return 0
+    selection = menu.stdout.strip()
+    if not selection:
+        return 0
 
-        original = display_to_full.get(selection)
-        if original is None:
-            return 1
+    original = display_to_full.get(selection)
+    if original is None:
+        return 1
 
-        decoded = decode_entry(original)
-        if decoded is None:
-            return 1
+    decoded = decode_entry(original)
+    if decoded is None:
+        return 1
 
-        copied = subprocess.run(
-            ["wl-copy"],
-            input=decoded,
-            check=False,
-        )
-        if copied.returncode == 0:
-            remove_restored_duplicate(original, decoded)
-        return copied.returncode
+    copied = subprocess.run(
+        ["wl-copy"],
+        input=decoded,
+        check=False,
+    )
+    if copied.returncode == 0:
+        remove_restored_duplicate(original, decoded)
+    return copied.returncode
 
 
 if __name__ == "__main__":
