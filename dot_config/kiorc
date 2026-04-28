@@ -3,3 +3,7 @@ ConfirmDelete=true
 
 [Executable scripts]
 behaviourOnLaunch=execute
+
+[General]
+TerminalApplication=kitty
+TerminalService=kitty.desktop
