@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Dolphin
+GenericName=File Manager
+Comment=Manage your files
+Exec=dolphin-themed %u
+Icon=org.kde.dolphin
+Categories=Qt;KDE;System;FileTools;FileManager;
+MimeType=inode/directory;
+InitialPreference=10
+StartupNotify=true
