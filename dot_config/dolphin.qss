@@ -1,0 +1,34 @@
+QAbstractItemView {
+  alternate-background-color: #201d2a;
+}
+
+TerminalPanel,
+TerminalPanel QFrame,
+TerminalPanel QWidget,
+QDockWidget[windowTitle="Terminal"] {
+  min-height: 0px;
+  max-height: 0px;
+  border: 0px;
+  margin: 0px;
+  padding: 0px;
+}
+
+QDockWidget[windowTitle="Terminal"]::title {
+  min-height: 0px;
+  max-height: 0px;
+  margin: 0px;
+  padding: 0px;
+}
+
+QListView,
+QTreeView,
+KFilePlacesView {
+  background-color: #201d2a;
+  alternate-background-color: #201d2a;
+}
+
+QListView::item:alternate,
+QTreeView::item:alternate,
+KFilePlacesView::item:alternate {
+  background-color: #201d2a;
+}
