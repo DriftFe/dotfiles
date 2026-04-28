@@ -1,4 +1,6 @@
 [General]
+HomeUrl=file:///home/drift
+RememberOpenedTabs=false
 Version=202
 ViewPropsTimestamp=2026,4,8,19,39,50.515
 
