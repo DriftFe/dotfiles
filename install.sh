@@ -4,6 +4,7 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$script_dir"
 
 REPO_URL="https://github.com/DriftFe/dotfiles.git"
 WORK_DIR=""
@@ -65,6 +66,16 @@ config_overrides_enabled() {
   [[ "$FORCE_CONFIG_OVERRIDES" == "1" ]]
 }
 
+gsettings_value_is() {
+  local schema="$1"
+  local key="$2"
+  local expected="$3"
+  local current=""
+
+  current="$(gsettings get "$schema" "$key" 2>/dev/null || true)"
+  [[ "$current" == "$expected" ]]
+}
+
 sync_dotfiles() {
   if config_overrides_enabled; then
     rsync -avh --mkpath "$SRC_DOTCONFIG"/ "$DEST_CONFIG"/
@@ -73,10 +84,40 @@ sync_dotfiles() {
   fi
 }
 
+install_local_bin_files() {
+  local src_dir="$REPO_ROOT/local_bin"
+  local dest_dir="$HOME/.local/bin"
+
+  [[ -d "$src_dir" ]] || return 0
+
+  mkdir -p "$dest_dir"
+  rsync -avh --mkpath "$src_dir"/ "$dest_dir"/
+  find "$dest_dir" -maxdepth 1 -type f -exec chmod +x {} +
+  success "Installed local helper commands"
+}
+
+install_local_applications() {
+  local src_dir="$REPO_ROOT/local_share/applications"
+  local dest_dir="$HOME/.local/share/applications"
+  local dolphin_desktop="$dest_dir/org.kde.dolphin.desktop"
+
+  [[ -d "$src_dir" ]] || return 0
+
+  mkdir -p "$dest_dir"
+  rsync -avh --mkpath "$src_dir"/ "$dest_dir"/
+
+  if [[ -f "$dolphin_desktop" ]]; then
+    sed -i "s|^Exec=.*|Exec=$HOME/.local/bin/dolphin-themed %u|" "$dolphin_desktop"
+  fi
+
+  success "Installed local desktop entry overrides"
+}
+
 enable_system_service() {
   local unit="$1"
 
   if systemctl list-unit-files --type=service | awk '{print $1}' | grep -Fxq "$unit"; then
+    sudo systemctl unmask "$unit" >/dev/null 2>&1 || true
     sudo systemctl enable --now "$unit"
     success "Enabled $unit"
   else
@@ -121,6 +162,201 @@ set_default_gdm_session() {
     fi
   else
     warn "AccountsService not detected; wrote $dmrc only"
+  fi
+}
+
+set_system_default_target() {
+  local target="$1"
+
+  if systemctl list-unit-files --type=target | awk '{print $1}' | grep -Fxq "$target"; then
+    sudo systemctl set-default "$target"
+    success "Set default systemd target to $target"
+  else
+    warn "$target not found, skipping"
+  fi
+}
+
+install_hyprland_session_for_gdm() {
+  local session_dir="/usr/share/wayland-sessions"
+  local session_file="$session_dir/hyprland.desktop"
+  local source_candidates=(
+    "/usr/share/hyprland/hyprland.desktop"
+    "/usr/share/wayland-sessions/hyprland.desktop"
+  )
+  local candidate
+
+  if [[ -f "$session_file" ]]; then
+    success "Hyprland GDM session entry is present"
+    return 0
+  fi
+
+  for candidate in "${source_candidates[@]}"; do
+    if [[ -f "$candidate" ]]; then
+      sudo install -d -m755 "$session_dir"
+      sudo install -m644 "$candidate" "$session_file"
+      success "Installed Hyprland session entry for GDM"
+      return 0
+    fi
+  done
+
+  warn "Hyprland session entry was not found; GDM may not list Hyprland until the desktop file is installed"
+}
+
+configure_bluetooth_defaults() {
+  local bluetooth_conf="/etc/bluetooth/main.conf"
+  local tmp_file=""
+
+  [[ -f "$bluetooth_conf" ]] || return 0
+
+  tmp_file="$(mktemp)"
+  awk '
+    BEGIN { updated=0 }
+    /^[[:space:]]*#?[[:space:]]*AutoEnable[[:space:]]*=/ {
+      print "AutoEnable=true"
+      updated=1
+      next
+    }
+    { print }
+    END {
+      if (!updated) {
+        print "AutoEnable=true"
+      }
+    }
+  ' "$bluetooth_conf" > "$tmp_file"
+  sudo install -m644 "$tmp_file" "$bluetooth_conf"
+  rm -f "$tmp_file"
+  success "Configured Bluetooth to power adapters on at startup"
+}
+
+install_gtk_defaults() {
+  local gtk3_dir="$DEST_CONFIG/gtk-3.0"
+  local gtk4_dir="$DEST_CONFIG/gtk-4.0"
+  local gtk3_file="$gtk3_dir/settings.ini"
+  local gtk4_file="$gtk4_dir/settings.ini"
+
+  mkdir -p "$gtk3_dir" "$gtk4_dir"
+
+  cat > "$gtk3_file" <<'EOF'
+[Settings]
+gtk-theme-name=adw-gtk3-dark
+gtk-application-prefer-dark-theme=true
+gtk-cursor-theme-name=Bibata-Modern-Classic
+gtk-cursor-theme-size=24
+gtk-font-name=Noto Sans, 10
+gtk-icon-theme-name=Adwaita
+gtk-decoration-layout=icon:minimize,maximize,close
+gtk-enable-animations=true
+gtk-primary-button-warps-slider=true
+EOF
+  success "Installed GTK 3 dark theme defaults"
+
+  cat > "$gtk4_file" <<'EOF'
+[Settings]
+gtk-theme-name=adw-gtk3-dark
+gtk-application-prefer-dark-theme=true
+gtk-cursor-theme-name=Bibata-Modern-Classic
+gtk-cursor-theme-size=24
+gtk-font-name=Noto Sans, 10
+gtk-icon-theme-name=Adwaita
+gtk-decoration-layout=icon:minimize,maximize,close
+gtk-enable-animations=true
+gtk-primary-button-warps-slider=true
+EOF
+  success "Installed GTK 4 dark theme defaults"
+}
+
+install_kde_color_scheme() {
+  local scheme_dir="$HOME/.local/share/color-schemes"
+  local scheme_file="$scheme_dir/KittyLavender.colors"
+  local source_file="$REPO_ROOT/kde-color-schemes/KittyLavender.colors"
+
+  if [[ ! -f "$source_file" ]]; then
+    warn "KittyLavender KDE color scheme source not found, skipping"
+    return 0
+  fi
+
+  mkdir -p "$scheme_dir"
+  install -m644 "$source_file" "$scheme_file"
+  success "Installed KittyLavender KDE color scheme"
+}
+
+install_kio_defaults() {
+  local kiorc_file="$DEST_CONFIG/kiorc"
+
+  mkdir -p "$DEST_CONFIG"
+  touch "$kiorc_file"
+
+  if grep -q '^\[General\]' "$kiorc_file"; then
+    if grep -q '^TerminalApplication=' "$kiorc_file"; then
+      sed -i 's|^TerminalApplication=.*|TerminalApplication=kitty|' "$kiorc_file"
+    else
+      sed -i '/^\[General\]/a TerminalApplication=kitty' "$kiorc_file"
+    fi
+
+    if grep -q '^TerminalService=' "$kiorc_file"; then
+      sed -i 's|^TerminalService=.*|TerminalService=kitty.desktop|' "$kiorc_file"
+    else
+      sed -i '/^\[General\]/a TerminalService=kitty.desktop' "$kiorc_file"
+    fi
+  else
+    cat >> "$kiorc_file" <<'EOF'
+
+[General]
+TerminalApplication=kitty
+TerminalService=kitty.desktop
+EOF
+  fi
+
+  success "Configured KDE apps to use Kitty as the terminal"
+}
+
+configure_zsh_theme() {
+  local desired_theme='ZSH_THEME="powerlevel10k/powerlevel10k"'
+
+  [[ -f "$ZSHRC" ]] || return 0
+
+  if grep -q '^ZSH_THEME=' "$ZSHRC"; then
+    if config_overrides_enabled || grep -Eq '^ZSH_THEME="?(robbyrussell|random)"?$' "$ZSHRC"; then
+      sed -i 's|^ZSH_THEME=.*|'"$desired_theme"'|' "$ZSHRC"
+      success "Configured Powerlevel10k as the active Oh My Zsh theme"
+    else
+      info "Keeping existing ZSH_THEME in $ZSHRC"
+    fi
+  else
+    ensure_line_in_file "$ZSHRC" "$desired_theme"
+    success "Added Powerlevel10k theme to $ZSHRC"
+  fi
+}
+
+ensure_zsh_plugin_enabled() {
+  local plugin="$1"
+  local plugins_line=""
+  local plugin_list=()
+  local item=""
+
+  [[ -f "$ZSHRC" ]] || return 0
+
+  if grep -q '^plugins=' "$ZSHRC"; then
+    plugins_line="$(grep '^plugins=' "$ZSHRC" | head -n1)"
+    plugins_line="${plugins_line#plugins=}"
+    plugins_line="${plugins_line#\(}"
+    plugins_line="${plugins_line%\)}"
+
+    read -r -a plugin_list <<< "$plugins_line"
+
+    for item in "${plugin_list[@]}"; do
+      if [[ "$item" == "$plugin" ]]; then
+        info "Keeping existing plugins= line in $ZSHRC"
+        return 0
+      fi
+    done
+
+    plugin_list+=("$plugin")
+    sed -i "s|^plugins=.*|plugins=(${plugin_list[*]})|" "$ZSHRC"
+    success "Enabled $plugin in $ZSHRC"
+  else
+    ensure_line_in_file "$ZSHRC" "plugins=(git $plugin)"
+    success "Added plugins=(git $plugin) to $ZSHRC"
   fi
 }
 
@@ -493,7 +729,8 @@ if [[ ! -d "$SRC_DOTCONFIG" ]]; then
   info "Cloning dotfiles repository..."
   git clone --depth=1 "$REPO_URL" "$WORK_DIR/repo"
 
-  SRC_DOTCONFIG="$WORK_DIR/repo/dot_config"
+  REPO_ROOT="$WORK_DIR/repo"
+  SRC_DOTCONFIG="$REPO_ROOT/dot_config"
   [[ -d "$SRC_DOTCONFIG" ]] || err "dot_config directory not found in cloned repository."
 fi
 
@@ -602,9 +839,14 @@ mkdir -p "$DEST_CONFIG"
 
 log "Copying dotfiles into $DEST_CONFIG..."
 sync_dotfiles
+install_local_bin_files
+install_local_applications
 
 log "Installing font fallback preferences..."
 install_font_fallback_config
+install_gtk_defaults
+install_kde_color_scheme
+install_kio_defaults
 
 if ! have_cmd yay; then
   section "AUR helper"
@@ -630,9 +872,12 @@ enable_system_service "bluetooth.service"
 enable_system_service "gdm.service"
 enable_system_service "touchegg.service"
 enable_system_service "udisks2.service"
+set_system_default_target "graphical.target"
 disable_system_service_if_enabled "sddm.service"
 disable_system_service_if_enabled "lightdm.service"
+install_hyprland_session_for_gdm
 set_default_gdm_session "hyprland"
+configure_bluetooth_defaults
 
 log "Creating swww compatibility symlinks for Waypaper..."
 sudo ln -sf /usr/bin/awww /usr/bin/swww
@@ -673,7 +918,11 @@ done
 chmod +x "$script_dir/install.sh" 2>/dev/null || true
 
 if have_cmd gsettings; then
-  if config_overrides_enabled; then
+  if config_overrides_enabled || \
+    gsettings_value_is org.gnome.desktop.interface color-scheme "'default'" || \
+    gsettings_value_is org.gnome.desktop.interface gtk-theme "'Adwaita'" || \
+    gsettings_value_is org.gnome.desktop.interface icon-theme "'Adwaita'" || \
+    gsettings_value_is org.gnome.desktop.interface cursor-theme "'Adwaita'"; then
     section "Theme defaults"
     log "Applying GTK theme and cursor defaults..."
     gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
@@ -709,15 +958,7 @@ if [[ ! -d "$P10K_DIR" ]]; then
 fi
 
 if [[ -f "$ZSHRC" ]]; then
-  if grep -q '^ZSH_THEME=' "$ZSHRC"; then
-    if config_overrides_enabled; then
-      sed -i 's|^ZSH_THEME=.*|ZSH_THEME="powerlevel10k/powerlevel10k"|' "$ZSHRC"
-    else
-      info "Keeping existing ZSH_THEME in $ZSHRC"
-    fi
-  else
-    ensure_line_in_file "$ZSHRC" 'ZSH_THEME="powerlevel10k/powerlevel10k"'
-  fi
+  configure_zsh_theme
 fi
 
 log "Installing Zsh plugins..."
@@ -731,15 +972,7 @@ if [[ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ]]; then
 fi
 
 if [[ -f "$ZSHRC" ]]; then
-  if grep -q '^plugins=' "$ZSHRC"; then
-    if config_overrides_enabled; then
-      sed -i 's/^plugins=.*/plugins=(git zsh-autosuggestions)/' "$ZSHRC"
-    else
-      info "Keeping existing plugins= line in $ZSHRC"
-    fi
-  else
-    ensure_line_in_file "$ZSHRC" 'plugins=(git zsh-autosuggestions)'
-  fi
+  ensure_zsh_plugin_enabled "zsh-autosuggestions"
 fi
 
 section "Desktop defaults"
