@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec dolphin --stylesheet "$HOME/.config/dolphin.qss" "$@"
