@@ -10,6 +10,7 @@ out_file="$screens_dir/${timestamp}.png"
 source_file=""
 edit_file=""
 auto_copy_succeeded="false"
+area_timeout="20s"
 
 cleanup() {
   if [[ -n "$source_file" && -f "$source_file" ]]; then
@@ -62,9 +63,12 @@ capture_to_file() {
 }
 
 capture_area() {
-  hyprpicker -r -z &
-  sleep 0.1
-  grimblast --freeze save area -
+  if ! timeout --kill-after=2s "$area_timeout" grimblast --freeze save area -; then
+    pkill -u "$USER" -x slurp 2>/dev/null || true
+    pkill -u "$USER" -x grimblast 2>/dev/null || true
+    notify-send "Screenshot cancelled" "Area selection timed out or was interrupted"
+    return 1
+  fi
 }
 
 capture_screen() {
