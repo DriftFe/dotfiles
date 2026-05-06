@@ -360,6 +360,53 @@ ensure_zsh_plugin_enabled() {
   fi
 }
 
+configure_pacman_options() {
+  local tmp_file=""
+
+  tmp_file="$(mktemp)"
+  awk '
+    /^\[options\]$/ {
+      in_options=1
+      print
+      next
+    }
+
+    /^\[/ && in_options {
+      if (!candy_seen && !candy_added) {
+        print "ILoveCandy"
+        candy_added=1
+      }
+      in_options=0
+    }
+
+    in_options && /^[[:space:]]*#Color[[:space:]]*$/ {
+      $0="Color"
+    }
+
+    in_options && /^[[:space:]]*ILoveCandy[[:space:]]*$/ {
+      candy_seen=1
+    }
+
+    {
+      print
+      if (in_options && /^[[:space:]]*Color[[:space:]]*$/ && !candy_seen && !candy_added) {
+        print "ILoveCandy"
+        candy_added=1
+      }
+    }
+
+    END {
+      if (in_options && !candy_seen && !candy_added) {
+        print "ILoveCandy"
+      }
+    }
+  ' /etc/pacman.conf > "$tmp_file"
+
+  sudo install -m644 "$tmp_file" /etc/pacman.conf
+  rm -f "$tmp_file"
+  success "Enabled Pacman color output and ILoveCandy"
+}
+
 multilib_enabled() {
   awk '
     /^\[multilib\]$/ { in_multilib=1; next }
@@ -820,6 +867,8 @@ AUR_PACKAGES=(
 )
 
 section "System update"
+log "Configuring pacman options..."
+configure_pacman_options
 log "Updating system..."
 sudo pacman -Syu --noconfirm
 
