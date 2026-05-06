@@ -84,6 +84,17 @@ sync_dotfiles() {
   fi
 }
 
+install_mimeapps_defaults() {
+  local source_file="$SRC_DOTCONFIG/mimeapps.list"
+  local dest_file="$DEST_CONFIG/mimeapps.list"
+
+  [[ -f "$source_file" ]] || return 0
+
+  mkdir -p "$DEST_CONFIG"
+  install -m644 "$source_file" "$dest_file"
+  success "Installed default application associations"
+}
+
 install_local_bin_files() {
   local src_dir="$REPO_ROOT/local_bin"
   local dest_dir="$HOME/.local/bin"
@@ -308,6 +319,45 @@ EOF
   fi
 
   success "Configured KDE apps to use Kitty as the terminal"
+}
+
+set_media_mime_defaults() {
+  local video_mimes=(
+    video/mp4
+    video/x-matroska
+    video/webm
+    video/x-msvideo
+    video/quicktime
+    video/mpeg
+    video/x-ms-wmv
+    video/x-flv
+    video/ogg
+    video/3gpp
+    video/mp2t
+    video/x-m4v
+    application/ogg
+  )
+  local image_mimes=(
+    image/png
+    image/jpeg
+    image/gif
+    image/webp
+    image/bmp
+    image/tiff
+    image/svg+xml
+    image/avif
+    image/heif
+    image/heic
+  )
+  local mime
+
+  log "Setting media file defaults to mpv and imv..."
+  for mime in "${video_mimes[@]}"; do
+    xdg-mime default mpv.desktop "$mime" || true
+  done
+  for mime in "${image_mimes[@]}"; do
+    xdg-mime default imv.desktop "$mime" || true
+  done
 }
 
 configure_zsh_theme() {
@@ -803,6 +853,8 @@ PACMAN_PACKAGES=(
   grim
   slurp
   dolphin
+  mpv
+  imv
   networkmanager
   network-manager-applet
   pipewire
@@ -888,6 +940,7 @@ mkdir -p "$DEST_CONFIG"
 
 log "Copying dotfiles into $DEST_CONFIG..."
 sync_dotfiles
+install_mimeapps_defaults
 install_local_bin_files
 install_local_applications
 
@@ -1026,6 +1079,8 @@ fi
 
 section "Desktop defaults"
 if have_cmd xdg-mime; then
+  set_media_mime_defaults
+
   if config_overrides_enabled; then
     log "Setting Dolphin as the default file manager..."
     xdg-mime default org.kde.dolphin.desktop inode/directory || true
@@ -1048,7 +1103,7 @@ section "Validation"
 log "Validating core commands used by the dotfiles..."
 missing_commands=()
 for cmd in hyprland waybar wlogout wofi mako wl-copy wl-paste cliphist blueman-applet bluetoothctl \
-  udisksctl playerctl hyprpicker grimblast swappy awww-daemon dolphin hyprlock; do
+  udisksctl playerctl hyprpicker grimblast swappy awww-daemon dolphin hyprlock mpv imv; do
   have_cmd "$cmd" || missing_commands+=("$cmd")
 done
 
