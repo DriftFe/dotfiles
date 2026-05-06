@@ -322,42 +322,56 @@ EOF
 }
 
 set_media_mime_defaults() {
-  local video_mimes=(
-    video/mp4
-    video/x-matroska
-    video/webm
-    video/x-msvideo
-    video/quicktime
-    video/mpeg
-    video/x-ms-wmv
-    video/x-flv
-    video/ogg
-    video/3gpp
-    video/mp2t
-    video/x-m4v
-    application/ogg
-  )
-  local image_mimes=(
-    image/png
-    image/jpeg
-    image/gif
-    image/webp
-    image/bmp
-    image/tiff
-    image/svg+xml
-    image/avif
-    image/heif
-    image/heic
-  )
+  local mpv_desktop="/usr/share/applications/mpv.desktop"
+  local imv_desktop="/usr/share/applications/imv.desktop"
+  local mimes=()
   local mime
 
   log "Setting media file defaults to mpv and imv..."
-  for mime in "${video_mimes[@]}"; do
-    xdg-mime default mpv.desktop "$mime" || true
-  done
-  for mime in "${image_mimes[@]}"; do
-    xdg-mime default imv.desktop "$mime" || true
-  done
+
+  if [[ -f "$mpv_desktop" ]]; then
+    IFS=';' read -r -a mimes <<< "$(grep -m1 '^MimeType=' "$mpv_desktop" | cut -d= -f2-)"
+    for mime in "${mimes[@]}"; do
+      [[ -n "$mime" ]] && xdg-mime default mpv.desktop "$mime" || true
+    done
+  else
+    warn "mpv.desktop not found; video defaults may not be registered"
+  fi
+
+  if [[ -f "$imv_desktop" ]]; then
+    IFS=';' read -r -a mimes <<< "$(grep -m1 '^MimeType=' "$imv_desktop" | cut -d= -f2-)"
+    for mime in "${mimes[@]}"; do
+      [[ -n "$mime" ]] && xdg-mime default imv.desktop "$mime" || true
+    done
+  else
+    warn "imv.desktop not found; image defaults may not be registered"
+  fi
+}
+
+rebuild_kde_service_cache() {
+  rm -f "$HOME"/.cache/ksycoca6_* 2>/dev/null || true
+
+  if have_cmd update-mime-database; then
+    sudo update-mime-database /usr/share/mime || warn "Could not update shared MIME database"
+  fi
+
+  if have_cmd kbuildsycoca6; then
+    XDG_MENU_PREFIX=arch- kbuildsycoca6 --noincremental || warn "Could not rebuild KDE service cache"
+  fi
+}
+
+configure_kde_application_menu() {
+  local arch_menu="/etc/xdg/menus/arch-applications.menu"
+  local fallback_menu="/etc/xdg/menus/applications.menu"
+
+  if [[ -e "$arch_menu" && ! -e "$fallback_menu" ]]; then
+    sudo ln -sf "$arch_menu" "$fallback_menu"
+    success "Linked KDE fallback applications menu to Arch's XDG menu"
+  elif [[ -e "$fallback_menu" ]]; then
+    success "KDE fallback applications menu is present"
+  else
+    warn "$arch_menu is missing; install archlinux-xdg-menu if Dolphin cannot remember file associations"
+  fi
 }
 
 configure_zsh_theme() {
@@ -855,6 +869,10 @@ PACMAN_PACKAGES=(
   dolphin
   mpv
   imv
+  archlinux-xdg-menu
+  kio
+  kservice
+  shared-mime-info
   networkmanager
   network-manager-applet
   pipewire
@@ -949,6 +967,7 @@ install_font_fallback_config
 install_gtk_defaults
 install_kde_color_scheme
 install_kio_defaults
+configure_kde_application_menu
 
 if ! have_cmd yay; then
   section "AUR helper"
@@ -1089,6 +1108,7 @@ if have_cmd xdg-mime; then
     info "Keeping existing default file manager associations"
   fi
 fi
+rebuild_kde_service_cache
 
 if have_cmd xdg-user-dirs-update; then
   xdg-user-dirs-update
