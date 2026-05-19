@@ -1,131 +1,186 @@
-{
-  "layer": "top",
-  "position": "top",
-  "height": 30,
-  "modules-left": ["hyprland/workspaces"],
-  "modules-center": ["clock"],
-  "modules-right": [
-    "custom/signal-radar",
-    "custom/gaming",
-    "custom/wifi-icon",
-    "bluetooth",
-    "battery",
-    "pulseaudio",
-    "custom/brightness",
-    "custom/recorder",
-    "custom/keybinds",
-    "custom/power",
-    "tray"
-  ],
+window#waybar {
+  background-color: transparent;
+  color: #fff;
+  border: none;
+  box-shadow: none;
+  font-family: "Noto Sans", "Inter", "Roboto", sans-serif;
+  font-size: 13px;
+  margin: 0;
+  padding: 0;
+}
 
-  "custom/signal-radar": {
-    "format": "󰑓",
-    "tooltip": "Open signal radar",
-    "on-click": "~/.config/hypr/scripts/toggle-signal-radar.sh",
-    "interval": 3600
-  },
-
-  "custom/gaming": {
-    "format": "{}",
-    "return-type": "json",
-    "exec": "~/.config/hypr/scripts/gaming-mode.sh status",
-    "on-click": "~/.config/hypr/scripts/gaming-mode.sh toggle",
-    "interval": 1
-  },
-
-  "hyprland/workspaces": {
-    "disable-scroll": false,
-    "all-outputs": true,
-    "format": "{icon}",
-    "format-icons": {
-  "1": "1",
-  "2": "2",
-  "3": "3",
-  "4": "4",
-  "5": "5",
-  "6": "6",
-  "7": "7",
-  "8": "8",
-  "9": "9",
-  "10": "10",
-  "6_focused": "",
-  "7_focused": "",
-  "8_focused": "",
-  "9_focused": "",
-  "10_focused": "",
-  "default": "{id}"
+/* --- Workspaces --- */
+#workspaces,
+#hyprland-workspaces {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  padding: 0 4px;
+  margin: 8px 6px 0 8px;
+}
+#workspaces button,
+#hyprland-workspaces button {
+  background: transparent;
+  color: #bbb;
+  border: none;
+  border-radius: 4px;
+  margin: 2px 2px;
+  padding: 0 8px;
+  font-size: 16px;
+  transition: background 0.2s, color 0.2s;
+}
+#workspaces button.focused,
+#workspaces button.active,
+#hyprland-workspaces button.focused,
+#hyprland-workspaces button.active {
+  background: rgba(200, 200, 200, 0.22);
+  color: #cba6f7;
+  font-weight: bold;
+  border-radius: 6px;
+}
+#workspaces button.urgent,
+#hyprland-workspaces button.urgent {
+  background: rgba(243, 139, 168, 0.18);
+  color: #f38ba8;
+  border-radius: 6px;
+  animation: urgentBlink 1s linear infinite alternate;
+}
+#workspaces button:hover,
+#hyprland-workspaces button:hover {
+  background: rgba(100, 100, 100, 0.18);
+  color: #fff;
+  border-radius: 6px;
+}
+@keyframes urgentBlink {
+  to {
+    background: rgba(243, 139, 168, 0.35);
+    color: #fff;
   }
+}
 
-  },
+/* --- Clock --- */
+#clock {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  padding: 4px 10px;
+  margin: 8px 8px 0 8px;
+  font-weight: bold;
+}
 
-  "clock": {
-    "format": "  {:%a %d %b %H:%M}",
-    "tooltip-format": "{:%Y-%m-%d | %H:%M}"
-  },
+/* --- Bluetooth --- */
+#bluetooth {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: 8px 6px 0 2px;
+}
 
-  "bluetooth": {
-    "format": " {status}",
-    "format-disabled": "",
-    "format-off": "",
-    "format-on": "",
-    "format-connected": " {device_alias}",
-    "on-click": "blueman-manager"
-  },
+/* --- Battery --- */
+#battery {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: 8px 6px 0 2px;
+}
+#battery.charging {
+  background: rgba(40, 80, 40, 0.65);
+}
 
-  "battery": {
-    "format": "{icon} {capacity}%",
-    "format-charging": " {capacity}%",
-    "format-icons": ["", "", "", "", ""]
-  },
+/* --- Audio --- */
+#pulseaudio {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: 8px 6px 0 2px;
+}
+#pulseaudio.muted {
+  background: rgba(40, 40, 40, 0.55);
+}
 
-  "pulseaudio": {
-    "format": "{icon} {volume}%",
-    "format-muted": "",
-    "format-icons": {
-      "headphones": "",
-      "handsfree": "",
-      "headset": "",
-      "phone": "",
-      "portable": "",
-      "car": "",
-      "default": ["", ""]
-    },
-    "on-click": "pavucontrol"
-  },
+/* --- Tray --- */
+#tray {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  padding: 4px 6px;
+  margin: 8px 8px 0 2px;
+}
 
-  "custom/brightness": {
-    "format": " {percentage}%",
-    "interval": 2,
-    "return-type": "json",
-    "exec": "~/.config/waybar/scripts/brightness_json.sh",
-    "on-scroll-up": "brightnessctl set +5%",
-    "on-scroll-down": "brightnessctl set 5%-",
-    "tooltip": "Scroll to adjust brightness"
-  },
+/* --- Brightness --- */
+#custom-brightness {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: 8px 6px 0 2px;
+  color: #fff;
+}
 
-  "custom/recorder": {
-    "format": "",
-    "tooltip": "Toggle screen recording",
-    "on-click": "~/.config/waybar/scripts/toggle-recording.sh",
-    "interval": 1
-  },
+/* --- Recorder --- */
+#custom-recorder {
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: 8px 6px 0 2px;
+  font-size: 14px;
+}
 
-  "custom/keybinds": {
-  "format": "",
-  "tooltip": "Show Hyprland Keybinds",
-  "on-click": "~/.config/waybar/scripts/show-keybinds.sh",
-  "interval": 3600
-  },
+#custom-keybinds {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: 8px 6px 0 2px;
+  color: #fff;
+}
 
-  "custom/power": {
-    "format": "",
-    "tooltip": "Power Menu",
-    "on-click": "~/.config/waybar/scripts/power-menu.sh",
-    "interval": 3600
-  },
+#custom-signal-radar,
+#custom-gaming {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: 8px 6px 0 2px;
+  color: #fff;
+  border: none;
+  box-shadow: none;
+}
 
+#custom-power {
+  background: rgba(24, 16, 36, 0.55);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: 8px 6px 0 2px;
+  color: #e8dcfb;
+  border: 1px solid rgba(203, 166, 247, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+/* --- Hover effect for all modules --- */
+#bluetooth:hover,
+#custom-signal-radar:hover,
+#custom-gaming:hover,
+#pulseaudio:hover,
+#tray:hover,
+#custom-recorder:hover,
+#custom-keybinds:hover,
+#custom-power:hover {
+  background: rgba(203, 166, 247, 0.2);
+  color: #cba6f7;
+  box-shadow: 0 0 8px rgba(203, 166, 247, 0.5);
+  transition: background 0.2s ease, color 0.2s ease;
+}
 
-  "tray": {
-    "spacing": 10
-  }
+/* Use icon fallbacks only where needed to avoid layout issues */
+#clock,
+#bluetooth,
+#custom-signal-radar,
+#custom-gaming,
+#battery,
+#pulseaudio,
+#custom-brightness,
+#custom-recorder,
+#custom-keybinds,
+#custom-power,
+#tray,
+#workspaces,
+#hyprland-workspaces {
+  font-family: "Noto Sans", "Inter", "Roboto", "Symbols Nerd Font", "Symbols Nerd Font Mono", "Nerd Font Symbols", "Font Awesome 6 Free", "Font Awesome 5 Free", sans-serif;
 }
