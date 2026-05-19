@@ -6,6 +6,7 @@
   "modules-center": ["clock"],
   "modules-right": [
     "custom/signal-radar",
+    "custom/gaming",
     "custom/wifi-icon",
     "bluetooth",
     "battery",
@@ -22,6 +23,14 @@
     "tooltip": "Open signal radar",
     "on-click": "~/.config/hypr/scripts/toggle-signal-radar.sh",
     "interval": 3600
+  },
+
+  "custom/gaming": {
+    "format": "{}",
+    "return-type": "json",
+    "exec": "~/.config/hypr/scripts/gaming-mode.sh status",
+    "on-click": "~/.config/hypr/scripts/gaming-mode.sh toggle",
+    "interval": 1
   },
 
   "hyprland/workspaces": {
