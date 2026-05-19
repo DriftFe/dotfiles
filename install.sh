@@ -76,6 +76,133 @@ gsettings_value_is() {
   [[ "$current" == "$expected" ]]
 }
 
+validate_json_file() {
+  local file="$1"
+
+  [[ -f "$file" ]] || err "Missing required config file: $file"
+
+  if have_cmd python3; then
+    python3 -m json.tool "$file" >/dev/null || err "Invalid JSON: $file"
+  else
+    warn "python3 not found; skipping JSON validation for $file"
+  fi
+}
+
+validate_css_file() {
+  local file="$1"
+  local first_nonempty=""
+
+  [[ -f "$file" ]] || err "Missing required CSS file: $file"
+
+  first_nonempty="$(sed -n '/[^[:space:]]/ { s/^[[:space:]]*//; p; q; }' "$file")"
+  if [[ "$first_nonempty" == \{* || "$first_nonempty" == \[* ]]; then
+    err "$file looks like JSON, not CSS"
+  fi
+
+  grep -Eq '(^|[[:space:]])window#waybar[[:space:]]*\{' "$file" || \
+    err "$file does not look like a Waybar stylesheet"
+}
+
+validate_shell_scripts() {
+  local file
+
+  while IFS= read -r -d '' file; do
+    bash -n "$file" || err "Shell syntax check failed: $file"
+  done < <(find "$SRC_DOTCONFIG" -type f -name "*.sh" -print0)
+}
+
+validate_python_scripts() {
+  local file
+
+  if ! have_cmd python3; then
+    warn "python3 not found; skipping Python syntax validation"
+    return 0
+  fi
+
+  while IFS= read -r -d '' file; do
+    python3 -m py_compile "$file" || err "Python syntax check failed: $file"
+  done < <(find "$SRC_DOTCONFIG" -type f -name "*.py" -print0)
+}
+
+validate_referenced_config_files() {
+  if ! have_cmd python3; then
+    warn "python3 not found; skipping referenced script validation"
+    return 0
+  fi
+
+  python3 - "$SRC_DOTCONFIG" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+missing = []
+
+def check_config_path(source, label, command):
+    if not isinstance(command, str):
+        return
+
+    for match in re.finditer(r'~/(?:\.config)/([^"\'\s,;&|]+)', command):
+        rel = match.group(1)
+        target = root / rel
+        if not target.exists():
+            missing.append(f"{source}: {label} references missing ~/.config/{rel}")
+
+waybar_config = root / "waybar/config"
+if waybar_config.exists():
+    with waybar_config.open(encoding="utf-8") as f:
+        config = json.load(f)
+
+    for section in ("modules-left", "modules-center", "modules-right"):
+        for module in config.get(section, []):
+            if module.startswith("custom/") and module not in config:
+                missing.append(f"waybar/config: {section} lists {module}, but no module config exists")
+
+    for module, values in config.items():
+        if not isinstance(values, dict):
+            continue
+
+        for key in ("exec", "on-click", "on-scroll-up", "on-scroll-down"):
+            check_config_path("waybar/config", f"{module}.{key}", values.get(key))
+
+hypr_files = list((root / "hypr").glob("*.conf"))
+keys_file = root / "hypr/keys.conf"
+if keys_file.exists():
+    hypr_files.append(keys_file)
+
+for hypr_file in hypr_files:
+    text = hypr_file.read_text(encoding="utf-8")
+    for line_number, line in enumerate(text.splitlines(), 1):
+        check_config_path(str(hypr_file.relative_to(root)), f"line {line_number}", line)
+
+if missing:
+    for item in missing:
+        print(item, file=sys.stderr)
+    sys.exit(1)
+PY
+  local status=$?
+  (( status == 0 )) || err "One or more configs reference missing files"
+}
+
+validate_source_dotfiles() {
+  section "Config validation"
+  log "Checking source dotfiles before copying..."
+
+  validate_json_file "$SRC_DOTCONFIG/waybar/config"
+  validate_css_file "$SRC_DOTCONFIG/waybar/style.css"
+  validate_shell_scripts
+  validate_python_scripts
+  validate_referenced_config_files
+
+  if grep -R -nE '^[[:space:]]*pseudotile[[:space:]]*=' "$SRC_DOTCONFIG/hypr" >/dev/null 2>&1; then
+    grep -R -nE '^[[:space:]]*pseudotile[[:space:]]*=' "$SRC_DOTCONFIG/hypr" >&2 || true
+    err "Found obsolete Hyprland pseudotile config"
+  fi
+
+  success "Source dotfiles passed basic validation"
+}
+
 sync_dotfiles() {
   if config_overrides_enabled; then
     rsync -avh --mkpath "$SRC_DOTCONFIG"/ "$DEST_CONFIG"/
@@ -122,6 +249,21 @@ install_local_applications() {
   fi
 
   success "Installed local desktop entry overrides"
+}
+
+normalize_user_config_paths() {
+  local dolphinrc="$DEST_CONFIG/dolphinrc"
+  local bookmarks="$DEST_CONFIG/private_gtk-3.0/bookmarks"
+
+  if [[ -f "$dolphinrc" ]]; then
+    sed -i "s|^HomeUrl=file:///home/[^/[:space:]]*|HomeUrl=file://$HOME|" "$dolphinrc"
+    success "Normalized Dolphin home path"
+  fi
+
+  if [[ -f "$bookmarks" ]]; then
+    sed -i "s|file:///home/[^/]*/|file://$HOME/|g" "$bookmarks"
+    success "Normalized GTK bookmark paths"
+  fi
 }
 
 enable_system_service() {
@@ -847,6 +989,8 @@ fi
 
 PACMAN_PACKAGES=(
   git
+  jq
+  python
   zsh
   rsync
   curl
@@ -956,8 +1100,11 @@ sudo glib-compile-schemas /usr/share/glib-2.0/schemas
 
 mkdir -p "$DEST_CONFIG"
 
+validate_source_dotfiles
+
 log "Copying dotfiles into $DEST_CONFIG..."
 sync_dotfiles
+normalize_user_config_paths
 install_mimeapps_defaults
 install_local_bin_files
 install_local_applications
