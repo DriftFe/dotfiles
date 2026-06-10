@@ -4,19 +4,19 @@ set -euo pipefail
 mode="${1:-area-save}"
 screens_dir="$HOME/Pictures/Screenshots"
 mkdir -p "$screens_dir"
-
 timestamp="$(date +%Y%m%d_%H%M%S)"
 out_file="$screens_dir/${timestamp}.png"
+
 source_file=""
 edit_file=""
 auto_copy_succeeded="false"
 area_timeout="20s"
 
 cleanup() {
-  if [[ -n "$source_file" && -f "$source_file" ]]; then
+  if [[ -n "${source_file:-}" && -f "$source_file" ]]; then
     rm -f "$source_file"
   fi
-  if [[ -n "$edit_file" && -f "$edit_file" ]]; then
+  if [[ -n "${edit_file:-}" && -f "$edit_file" ]]; then
     rm -f "$edit_file"
   fi
 }
@@ -24,31 +24,28 @@ trap cleanup EXIT
 
 copy_image() {
   local image_path="$1"
+  [[ -s "$image_path" ]] || return 1
   wl-copy --type image/png < "$image_path"
 }
 
 try_auto_copy() {
   local image_path="$1"
-
-  [[ -s "$image_path" ]] || return 0
-
   if copy_image "$image_path"; then
     auto_copy_succeeded="true"
     notify-send "Screenshot copied" "Image copied to clipboard"
+    return 0
   fi
+  return 1
 }
 
 fallback_copy_if_needed() {
   local image_path="$1"
   local label="$2"
-
   [[ "$auto_copy_succeeded" == "true" ]] && return 0
-  [[ -s "$image_path" ]] || return 0
-
-  if copy_image "$image_path"; then
+  copy_image "$image_path" && {
     auto_copy_succeeded="true"
     notify-send "Screenshot copied" "$label copied to clipboard (fallback)"
-  fi
+  }
 }
 
 capture_to_file() {
@@ -84,6 +81,7 @@ case "$mode" in
     swappy -f "$source_file" -o "$edit_file"
     fallback_copy_if_needed "$edit_file" "Edited screenshot"
     ;;
+
   area-save)
     source_file="$(mktemp --suffix=.png /tmp/swappy-source-XXXXXX)"
     capture_to_file "$source_file" area
@@ -91,6 +89,7 @@ case "$mode" in
     swappy -f "$source_file" -o "$out_file"
     fallback_copy_if_needed "$out_file" "$(basename "$out_file")"
     ;;
+
   screen-save)
     source_file="$(mktemp --suffix=.png /tmp/swappy-source-XXXXXX)"
     capture_to_file "$source_file" screen
@@ -98,6 +97,7 @@ case "$mode" in
     swappy -f "$source_file" -o "$out_file"
     fallback_copy_if_needed "$out_file" "$(basename "$out_file")"
     ;;
+
   *)
     notify-send "Screenshot failed" "Unknown mode: $mode"
     exit 2
