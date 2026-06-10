@@ -211,6 +211,19 @@ sync_dotfiles() {
   fi
 }
 
+install_zshrc() {
+  local source_file="$SRC_DOTCONFIG/.zshrc"
+
+  [[ -f "$source_file" ]] || return 0
+
+  if [[ ! -f "$ZSHRC" ]] || config_overrides_enabled; then
+    install -m644 "$source_file" "$ZSHRC"
+    success "Installed Zsh config to $ZSHRC"
+  else
+    info "Keeping existing $ZSHRC unchanged"
+  fi
+}
+
 install_mimeapps_defaults() {
   local source_file="$SRC_DOTCONFIG/mimeapps.list"
   local dest_file="$DEST_CONFIG/mimeapps.list"
@@ -223,7 +236,7 @@ install_mimeapps_defaults() {
 }
 
 install_local_bin_files() {
-  local src_dir="$REPO_ROOT/local_bin"
+  local src_dir="$SRC_DOTCONFIG/local_bin"
   local dest_dir="$HOME/.local/bin"
 
   [[ -d "$src_dir" ]] || return 0
@@ -235,7 +248,7 @@ install_local_bin_files() {
 }
 
 install_local_applications() {
-  local src_dir="$REPO_ROOT/local_share/applications"
+  local src_dir="$SRC_DOTCONFIG/local_share/applications"
   local dest_dir="$HOME/.local/share/applications"
   local dolphin_desktop="$dest_dir/org.kde.dolphin.desktop"
 
@@ -269,10 +282,15 @@ normalize_user_config_paths() {
 enable_system_service() {
   local unit="$1"
 
-  if systemctl list-unit-files --type=service | awk '{print $1}' | grep -Fxq "$unit"; then
+  if systemctl list-unit-files "$unit" --type=service --no-legend 2>/dev/null | awk '{print $1}' | grep -Fxq "$unit"; then
     sudo systemctl unmask "$unit" >/dev/null 2>&1 || true
-    sudo systemctl enable --now "$unit"
-    success "Enabled $unit"
+    sudo systemctl enable "$unit"
+
+    if sudo systemctl start "$unit"; then
+      success "Enabled and started $unit"
+    else
+      warn "Enabled $unit, but it could not be started right now"
+    fi
   else
     warn "$unit not found, skipping"
   fi
@@ -418,19 +436,25 @@ EOF
   success "Installed GTK 4 dark theme defaults"
 }
 
-install_kde_color_scheme() {
-  local scheme_dir="$HOME/.local/share/color-schemes"
-  local scheme_file="$scheme_dir/KittyLavender.colors"
-  local source_file="$REPO_ROOT/kde-color-schemes/KittyLavender.colors"
+install_kde_theme_files() {
+  local data_dir="$HOME/.local/share"
+  local source_dir="$SRC_DOTCONFIG/kde-color-schemes"
 
-  if [[ ! -f "$source_file" ]]; then
-    warn "KittyLavender KDE color scheme source not found, skipping"
-    return 0
+  if [[ -d "$source_dir" ]]; then
+    mkdir -p "$data_dir/color-schemes"
+    rsync -avh --mkpath "$source_dir"/ "$data_dir/color-schemes"/
+    success "Installed KDE color schemes"
   fi
 
-  mkdir -p "$scheme_dir"
-  install -m644 "$source_file" "$scheme_file"
-  success "Installed KittyLavender KDE color scheme"
+  if [[ -f "$SRC_DOTCONFIG/kdeglobals" ]]; then
+    install -m644 "$SRC_DOTCONFIG/kdeglobals" "$DEST_CONFIG/kdeglobals"
+    success "Installed KDE global theme defaults"
+  fi
+
+  if [[ -f "$SRC_DOTCONFIG/dolphin.qss" ]]; then
+    install -m644 "$SRC_DOTCONFIG/dolphin.qss" "$DEST_CONFIG/dolphin.qss"
+    success "Installed Dolphin stylesheet"
+  fi
 }
 
 install_kio_defaults() {
@@ -563,6 +587,15 @@ ensure_zsh_plugin_enabled() {
   else
     ensure_line_in_file "$ZSHRC" "plugins=(git $plugin)"
     success "Added plugins=(git $plugin) to $ZSHRC"
+  fi
+}
+
+cleanup_legacy_zsh_autosuggestions_source() {
+  [[ -f "$ZSHRC" ]] || return 0
+
+  if grep -Fxq 'source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh' "$ZSHRC"; then
+    sed -i '\|^source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh$|d' "$ZSHRC"
+    success "Removed legacy zsh-autosuggestions source line from $ZSHRC"
   fi
 }
 
@@ -1104,6 +1137,7 @@ validate_source_dotfiles
 
 log "Copying dotfiles into $DEST_CONFIG..."
 sync_dotfiles
+install_zshrc
 normalize_user_config_paths
 install_mimeapps_defaults
 install_local_bin_files
@@ -1112,7 +1146,7 @@ install_local_applications
 log "Installing font fallback preferences..."
 install_font_fallback_config
 install_gtk_defaults
-install_kde_color_scheme
+install_kde_theme_files
 install_kio_defaults
 configure_kde_application_menu
 
@@ -1135,17 +1169,17 @@ fi
 
 section "System services"
 log "Enabling system services..."
+configure_bluetooth_defaults
+disable_system_service_if_enabled "sddm.service"
+disable_system_service_if_enabled "lightdm.service"
 enable_system_service "NetworkManager.service"
 enable_system_service "bluetooth.service"
 enable_system_service "gdm.service"
 enable_system_service "touchegg.service"
 enable_system_service "udisks2.service"
 set_system_default_target "graphical.target"
-disable_system_service_if_enabled "sddm.service"
-disable_system_service_if_enabled "lightdm.service"
 install_hyprland_session_for_gdm
 set_default_gdm_session "hyprland"
-configure_bluetooth_defaults
 
 log "Creating swww compatibility symlinks for Waypaper..."
 sudo ln -sf /usr/bin/awww /usr/bin/swww
@@ -1241,6 +1275,7 @@ fi
 
 if [[ -f "$ZSHRC" ]]; then
   ensure_zsh_plugin_enabled "zsh-autosuggestions"
+  cleanup_legacy_zsh_autosuggestions_source
 fi
 
 section "Desktop defaults"
