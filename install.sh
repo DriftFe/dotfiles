@@ -14,6 +14,7 @@ FAILED_AUR_PACKAGES=()
 CPU_PACKAGES=()
 GPU_PACKAGES=()
 FORCE_CONFIG_OVERRIDES="${FORCE_CONFIG_OVERRIDES:-0}"
+PRESERVE_EXISTING_CONFIGS="${PRESERVE_EXISTING_CONFIGS:-0}"
 
 C_RESET='\033[0m'
 C_GREEN='\033[0;32m'
@@ -64,6 +65,43 @@ ensure_line_in_file() {
 
 config_overrides_enabled() {
   [[ "$FORCE_CONFIG_OVERRIDES" == "1" ]]
+}
+
+preserve_existing_configs_enabled() {
+  [[ "$PRESERVE_EXISTING_CONFIGS" == "1" && "$FORCE_CONFIG_OVERRIDES" != "1" ]]
+}
+
+install_file_if_changed() {
+  local source_file="$1"
+  local dest_file="$2"
+  local mode="$3"
+  local label="$4"
+
+  [[ -f "$source_file" ]] || return 0
+  mkdir -p "$(dirname -- "$dest_file")"
+
+  if preserve_existing_configs_enabled && [[ -e "$dest_file" ]]; then
+    info "Keeping existing $label"
+    return 0
+  fi
+
+  if [[ -f "$dest_file" ]] && cmp -s "$source_file" "$dest_file"; then
+    info "$label is already current"
+    return 0
+  fi
+
+  install -m "$mode" "$source_file" "$dest_file"
+  success "Updated $label"
+}
+
+install_generated_file_if_changed() {
+  local source_file="$1"
+  local dest_file="$2"
+  local mode="$3"
+  local label="$4"
+
+  install_file_if_changed "$source_file" "$dest_file" "$mode" "$label"
+  rm -f "$source_file"
 }
 
 gsettings_value_is() {
@@ -204,10 +242,24 @@ validate_source_dotfiles() {
 }
 
 sync_dotfiles() {
-  if config_overrides_enabled; then
-    rsync -avh --mkpath "$SRC_DOTCONFIG"/ "$DEST_CONFIG"/
+  local rsync_args=(
+    -avh
+    --checksum
+    --mkpath
+    --exclude '/.zshrc'
+    --exclude '/local_bin/'
+    --exclude '/local_share/'
+    --exclude '/kde-color-schemes/'
+  )
+
+  if preserve_existing_configs_enabled; then
+    rsync_args+=(--ignore-existing)
+  fi
+
+  if rsync "${rsync_args[@]}" "$SRC_DOTCONFIG"/ "$DEST_CONFIG"/; then
+    success "Synced changed dotfiles into $DEST_CONFIG"
   else
-    rsync -avh --mkpath --ignore-existing "$SRC_DOTCONFIG"/ "$DEST_CONFIG"/
+    err "Dotfile sync failed"
   fi
 }
 
@@ -216,12 +268,7 @@ install_zshrc() {
 
   [[ -f "$source_file" ]] || return 0
 
-  if [[ ! -f "$ZSHRC" ]] || config_overrides_enabled; then
-    install -m644 "$source_file" "$ZSHRC"
-    success "Installed Zsh config to $ZSHRC"
-  else
-    info "Keeping existing $ZSHRC unchanged"
-  fi
+  install_file_if_changed "$source_file" "$ZSHRC" 644 "Zsh config"
 }
 
 install_mimeapps_defaults() {
@@ -230,38 +277,46 @@ install_mimeapps_defaults() {
 
   [[ -f "$source_file" ]] || return 0
 
-  mkdir -p "$DEST_CONFIG"
-  install -m644 "$source_file" "$dest_file"
-  success "Installed default application associations"
+  install_file_if_changed "$source_file" "$dest_file" 644 "default application associations"
 }
 
 install_local_bin_files() {
   local src_dir="$SRC_DOTCONFIG/local_bin"
   local dest_dir="$HOME/.local/bin"
+  local rsync_args=(-avh --checksum --mkpath)
 
   [[ -d "$src_dir" ]] || return 0
 
+  preserve_existing_configs_enabled && rsync_args+=(--ignore-existing)
+
   mkdir -p "$dest_dir"
-  rsync -avh --mkpath "$src_dir"/ "$dest_dir"/
+  rsync "${rsync_args[@]}" "$src_dir"/ "$dest_dir"/
   find "$dest_dir" -maxdepth 1 -type f -exec chmod +x {} +
-  success "Installed local helper commands"
+  success "Synced local helper commands"
 }
 
 install_local_applications() {
   local src_dir="$SRC_DOTCONFIG/local_share/applications"
   local dest_dir="$HOME/.local/share/applications"
   local dolphin_desktop="$dest_dir/org.kde.dolphin.desktop"
+  local dolphin_exec="Exec=$HOME/.local/bin/dolphin-themed %u"
+  local rsync_args=(-avh --checksum --mkpath)
 
   [[ -d "$src_dir" ]] || return 0
 
+  preserve_existing_configs_enabled && rsync_args+=(--ignore-existing)
+
   mkdir -p "$dest_dir"
-  rsync -avh --mkpath "$src_dir"/ "$dest_dir"/
+  rsync "${rsync_args[@]}" "$src_dir"/ "$dest_dir"/
 
   if [[ -f "$dolphin_desktop" ]]; then
-    sed -i "s|^Exec=.*|Exec=$HOME/.local/bin/dolphin-themed %u|" "$dolphin_desktop"
+    if ! grep -Fxq "$dolphin_exec" "$dolphin_desktop"; then
+      sed -i "s|^Exec=.*|$dolphin_exec|" "$dolphin_desktop"
+      success "Updated Dolphin desktop entry"
+    fi
   fi
 
-  success "Installed local desktop entry overrides"
+  success "Synced local desktop entry overrides"
 }
 
 normalize_user_config_paths() {
@@ -269,13 +324,17 @@ normalize_user_config_paths() {
   local bookmarks="$DEST_CONFIG/private_gtk-3.0/bookmarks"
 
   if [[ -f "$dolphinrc" ]]; then
-    sed -i "s|^HomeUrl=file:///home/[^/[:space:]]*|HomeUrl=file://$HOME|" "$dolphinrc"
-    success "Normalized Dolphin home path"
+    if grep -Eq '^HomeUrl=file:///home/[^/[:space:]]*' "$dolphinrc"; then
+      sed -i "s|^HomeUrl=file:///home/[^/[:space:]]*|HomeUrl=file://$HOME|" "$dolphinrc"
+      success "Normalized Dolphin home path"
+    fi
   fi
 
   if [[ -f "$bookmarks" ]]; then
-    sed -i "s|file:///home/[^/]*/|file://$HOME/|g" "$bookmarks"
-    success "Normalized GTK bookmark paths"
+    if grep -Eq 'file:///home/[^/]*/' "$bookmarks"; then
+      sed -i "s|file:///home/[^/]*/|file://$HOME/|g" "$bookmarks"
+      success "Normalized GTK bookmark paths"
+    fi
   fi
 }
 
@@ -285,12 +344,7 @@ enable_system_service() {
   if systemctl list-unit-files "$unit" --type=service --no-legend 2>/dev/null | awk '{print $1}' | grep -Fxq "$unit"; then
     sudo systemctl unmask "$unit" >/dev/null 2>&1 || true
     sudo systemctl enable "$unit"
-
-    if sudo systemctl start "$unit"; then
-      success "Enabled and started $unit"
-    else
-      warn "Enabled $unit, but it could not be started right now"
-    fi
+    success "Enabled $unit"
   else
     warn "$unit not found, skipping"
   fi
@@ -323,7 +377,7 @@ set_default_gdm_session() {
   if [[ -d /var/lib/AccountsService ]] || have_cmd accounts-daemon; then
     if [[ ! -f "/var/lib/AccountsService/users/$USER" ]] || config_overrides_enabled; then
       tmp_file="$(mktemp)"
-      printf '[User]\nSession=%s\nSessionType=wayland\n' "$session" > "$tmp_file"
+      printf '[User]\nSession=%s\nXSession=%s\nSessionType=wayland\n' "$session" "$session" > "$tmp_file"
       sudo install -d -m755 /var/lib/AccountsService/users
       sudo install -m644 "$tmp_file" "/var/lib/AccountsService/users/$USER"
       rm -f "$tmp_file"
@@ -404,10 +458,12 @@ install_gtk_defaults() {
   local gtk4_dir="$DEST_CONFIG/gtk-4.0"
   local gtk3_file="$gtk3_dir/settings.ini"
   local gtk4_file="$gtk4_dir/settings.ini"
+  local tmp_file=""
 
   mkdir -p "$gtk3_dir" "$gtk4_dir"
 
-  cat > "$gtk3_file" <<'EOF'
+  tmp_file="$(mktemp)"
+  cat > "$tmp_file" <<'EOF'
 [Settings]
 gtk-theme-name=adw-gtk3-dark
 gtk-application-prefer-dark-theme=true
@@ -419,9 +475,10 @@ gtk-decoration-layout=icon:minimize,maximize,close
 gtk-enable-animations=true
 gtk-primary-button-warps-slider=true
 EOF
-  success "Installed GTK 3 dark theme defaults"
+  install_generated_file_if_changed "$tmp_file" "$gtk3_file" 644 "GTK 3 dark theme defaults"
 
-  cat > "$gtk4_file" <<'EOF'
+  tmp_file="$(mktemp)"
+  cat > "$tmp_file" <<'EOF'
 [Settings]
 gtk-theme-name=adw-gtk3-dark
 gtk-application-prefer-dark-theme=true
@@ -433,28 +490,23 @@ gtk-decoration-layout=icon:minimize,maximize,close
 gtk-enable-animations=true
 gtk-primary-button-warps-slider=true
 EOF
-  success "Installed GTK 4 dark theme defaults"
+  install_generated_file_if_changed "$tmp_file" "$gtk4_file" 644 "GTK 4 dark theme defaults"
 }
 
 install_kde_theme_files() {
   local data_dir="$HOME/.local/share"
   local source_dir="$SRC_DOTCONFIG/kde-color-schemes"
+  local rsync_args=(-avh --checksum --mkpath)
 
   if [[ -d "$source_dir" ]]; then
+    preserve_existing_configs_enabled && rsync_args+=(--ignore-existing)
     mkdir -p "$data_dir/color-schemes"
-    rsync -avh --mkpath "$source_dir"/ "$data_dir/color-schemes"/
-    success "Installed KDE color schemes"
+    rsync "${rsync_args[@]}" "$source_dir"/ "$data_dir/color-schemes"/
+    success "Synced KDE color schemes"
   fi
 
-  if [[ -f "$SRC_DOTCONFIG/kdeglobals" ]]; then
-    install -m644 "$SRC_DOTCONFIG/kdeglobals" "$DEST_CONFIG/kdeglobals"
-    success "Installed KDE global theme defaults"
-  fi
-
-  if [[ -f "$SRC_DOTCONFIG/dolphin.qss" ]]; then
-    install -m644 "$SRC_DOTCONFIG/dolphin.qss" "$DEST_CONFIG/dolphin.qss"
-    success "Installed Dolphin stylesheet"
-  fi
+  install_file_if_changed "$SRC_DOTCONFIG/kdeglobals" "$DEST_CONFIG/kdeglobals" 644 "KDE global theme defaults"
+  install_file_if_changed "$SRC_DOTCONFIG/dolphin.qss" "$DEST_CONFIG/dolphin.qss" 644 "Dolphin stylesheet"
 }
 
 install_kio_defaults() {
@@ -465,13 +517,15 @@ install_kio_defaults() {
 
   if grep -q '^\[General\]' "$kiorc_file"; then
     if grep -q '^TerminalApplication=' "$kiorc_file"; then
-      sed -i 's|^TerminalApplication=.*|TerminalApplication=kitty|' "$kiorc_file"
+      grep -Fxq 'TerminalApplication=kitty' "$kiorc_file" || \
+        sed -i 's|^TerminalApplication=.*|TerminalApplication=kitty|' "$kiorc_file"
     else
       sed -i '/^\[General\]/a TerminalApplication=kitty' "$kiorc_file"
     fi
 
     if grep -q '^TerminalService=' "$kiorc_file"; then
-      sed -i 's|^TerminalService=.*|TerminalService=kitty.desktop|' "$kiorc_file"
+      grep -Fxq 'TerminalService=kitty.desktop' "$kiorc_file" || \
+        sed -i 's|^TerminalService=.*|TerminalService=kitty.desktop|' "$kiorc_file"
     else
       sed -i '/^\[General\]/a TerminalService=kitty.desktop' "$kiorc_file"
     fi
@@ -597,6 +651,40 @@ cleanup_legacy_zsh_autosuggestions_source() {
     sed -i '\|^source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh$|d' "$ZSHRC"
     success "Removed legacy zsh-autosuggestions source line from $ZSHRC"
   fi
+}
+
+ensure_login_shell_is_allowed() {
+  local shell_path="$1"
+
+  [[ -n "$shell_path" ]] || return 0
+  [[ -f /etc/shells ]] || return 0
+
+  if ! grep -Fxq "$shell_path" /etc/shells; then
+    printf '%s\n' "$shell_path" | sudo tee -a /etc/shells >/dev/null
+    success "Added $shell_path to /etc/shells"
+  fi
+}
+
+configure_kitty_shell() {
+  local kitty_conf="$DEST_CONFIG/kitty/kitty.conf"
+  local zsh_path=""
+
+  [[ -f "$kitty_conf" ]] || return 0
+  zsh_path="$(command -v zsh 2>/dev/null || true)"
+  [[ -n "$zsh_path" ]] || return 0
+
+  if grep -Fxq "shell $zsh_path" "$kitty_conf"; then
+    info "Kitty shell is already zsh"
+    return 0
+  fi
+
+  if grep -Eq '^[#[:space:]]*shell[[:space:]]+' "$kitty_conf"; then
+    sed -i "s|^[#[:space:]]*shell[[:space:]].*|shell $zsh_path|" "$kitty_conf"
+  else
+    printf '\nshell %s\n' "$zsh_path" >> "$kitty_conf"
+  fi
+
+  success "Configured Kitty to launch zsh"
 }
 
 configure_pacman_options() {
@@ -859,15 +947,12 @@ enable_user_service() {
 install_font_fallback_config() {
   local fontconfig_dir="$DEST_CONFIG/fontconfig/conf.d"
   local fontconfig_file="$fontconfig_dir/75-font-fallbacks.conf"
+  local tmp_file=""
 
   mkdir -p "$fontconfig_dir"
 
-  if [[ -f "$fontconfig_file" ]] && ! config_overrides_enabled; then
-    info "Keeping existing font fallback config at $fontconfig_file"
-    return 0
-  fi
-
-  cat > "$fontconfig_file" <<'EOF'
+  tmp_file="$(mktemp)"
+  cat > "$tmp_file" <<'EOF'
 <?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
 <fontconfig>
@@ -932,7 +1017,7 @@ install_font_fallback_config() {
 </fontconfig>
 EOF
 
-  success "Installed font fallback config at $fontconfig_file"
+  install_generated_file_if_changed "$tmp_file" "$fontconfig_file" 644 "font fallback config"
 }
 
 install_pacman_packages() {
@@ -1142,6 +1227,7 @@ normalize_user_config_paths
 install_mimeapps_defaults
 install_local_bin_files
 install_local_applications
+configure_kitty_shell
 
 log "Installing font fallback preferences..."
 install_font_fallback_config
@@ -1235,6 +1321,7 @@ success "Ensured ~/Pictures/Screenshots exists"
 section "Zsh setup"
 log "Configuring Zsh..."
 if have_cmd zsh && [[ "$SHELL" != "$(command -v zsh)" ]]; then
+  ensure_login_shell_is_allowed "$(command -v zsh)"
   chsh -s "$(command -v zsh)" "$USER" || warn "Could not change default shell to zsh"
 fi
 
@@ -1315,8 +1402,10 @@ echo ""
 success "Installation complete!"
 if config_overrides_enabled; then
   info "Applied config overrides because FORCE_CONFIG_OVERRIDES=1 was set."
+elif preserve_existing_configs_enabled; then
+  info "Preserved existing config files because PRESERVE_EXISTING_CONFIGS=1 was set."
 else
-  info "Safe update mode kept existing config files and defaults in place."
+  info "Update mode synced files whose content changed and skipped files already current."
 fi
 if (( ${#CPU_PACKAGES[@]} > 0 )); then
   info "CPU package choice: ${CPU_DRIVER_LABEL:-custom}"
