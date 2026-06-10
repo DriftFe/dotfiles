@@ -27,8 +27,8 @@
   "custom/gaming": {
     "format": "{}",
     "return-type": "json",
-    "exec": "~/.config/hypr/scripts/gaming-mode.sh status",
-    "on-click": "~/.config/hypr/scripts/gaming-mode.sh toggle",
+    "exec": "$HOME/.config/hypr/scripts/gaming-mode.sh status",
+    "on-click": "$HOME/.config/hypr/scripts/gaming-mode.sh toggle",
     "interval": 1
   },
 
