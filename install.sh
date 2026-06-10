@@ -1220,21 +1220,13 @@ done
 chmod +x "$script_dir/install.sh" 2>/dev/null || true
 
 if have_cmd gsettings; then
-  if config_overrides_enabled || \
-    gsettings_value_is org.gnome.desktop.interface color-scheme "'default'" || \
-    gsettings_value_is org.gnome.desktop.interface gtk-theme "'Adwaita'" || \
-    gsettings_value_is org.gnome.desktop.interface icon-theme "'Adwaita'" || \
-    gsettings_value_is org.gnome.desktop.interface cursor-theme "'Adwaita'"; then
-    section "Theme defaults"
-    log "Applying GTK theme and cursor defaults..."
-    gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
-    gsettings set org.gnome.desktop.interface gtk-theme 'adw-gtk3-dark' || true
-    gsettings set org.gnome.desktop.interface icon-theme 'Adwaita' || true
-    gsettings set org.gnome.desktop.interface cursor-theme 'Bibata-Modern-Classic' || true
-    gsettings set org.gnome.desktop.interface cursor-size 24 || true
-  else
-    info "Keeping existing GTK theme and cursor settings"
-  fi
+  section "Theme defaults"
+  log "Applying dark GTK theme and cursor defaults..."
+  gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
+  gsettings set org.gnome.desktop.interface gtk-theme 'adw-gtk3-dark' || true
+  gsettings set org.gnome.desktop.interface icon-theme 'Adwaita' || true
+  gsettings set org.gnome.desktop.interface cursor-theme 'Bibata-Modern-Classic' || true
+  gsettings set org.gnome.desktop.interface cursor-size 24 || true
 fi
 
 mkdir -p "$HOME/Pictures/Screenshots"
