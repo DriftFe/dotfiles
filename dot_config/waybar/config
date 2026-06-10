@@ -7,7 +7,6 @@
   "modules-right": [
     "custom/signal-radar",
     "custom/gaming",
-    "custom/wifi-icon",
     "bluetooth",
     "battery",
     "pulseaudio",
