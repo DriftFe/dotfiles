@@ -28,9 +28,9 @@ is_enabled() {
 
 status() {
     if is_enabled; then
-        printf '{"text":"󰊴","tooltip":"%s","class":"on"}\n' "$(json_escape "Gaming mode: on")"
+        printf '{"text":"","tooltip":"%s","class":"on"}\n' "$(json_escape "Gaming mode: on")"
     else
-        printf '{"text":"󰊴","tooltip":"%s","class":"off"}\n' "$(json_escape "Gaming mode: off")"
+        printf '{"text":"","tooltip":"%s","class":"off"}\n' "$(json_escape "Gaming mode: off")"
     fi
 }
 
