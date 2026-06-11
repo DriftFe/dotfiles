@@ -1110,6 +1110,8 @@ PACMAN_PACKAGES=(
   jq
   python
   zsh
+  adw-gtk-theme
+  gnome-themes-extra
   rsync
   curl
   wget
