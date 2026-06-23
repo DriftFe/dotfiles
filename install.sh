@@ -1186,6 +1186,7 @@ PACMAN_PACKAGES=(
 
 AUR_PACKAGES=(
   wlogout
+  vscodium-bin
   waypaper
   vesktop-bin
   zen-browser-bin
