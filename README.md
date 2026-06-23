@@ -15,12 +15,11 @@ This is my soft lavender hyprland setup for arch linux >~< it's got a glassy loo
 ### apps i actually use
 - Kitty
 - Dolphin
-- VS Code
+- VS Code (Codium)
 - Spotify
 - Vesktop
 - Zen Browser
-- Kdenlive
-### shell & pretty visuals
+- ### shell & pretty visuals
 - Zsh
 - Oh My Zsh
 - Starship
