@@ -1108,6 +1108,7 @@ fi
 PACMAN_PACKAGES=(
   git
   jq
+  neovim
   python
   zsh
   adw-gtk-theme
@@ -1181,12 +1182,13 @@ PACMAN_PACKAGES=(
   xdg-desktop-portal
   xdg-desktop-portal-hyprland
   xdg-user-dirs
+  ripgrep
+  fd
   polkit-gnome
 )
 
 AUR_PACKAGES=(
   wlogout
-  vscodium-bin
   waypaper
   vesktop-bin
   zen-browser-bin
@@ -1274,6 +1276,10 @@ log "Creating swww compatibility symlinks for Waypaper..."
 sudo ln -sf /usr/bin/awww /usr/bin/swww
 sudo ln -sf /usr/bin/awww-daemon /usr/bin/swww-daemon
 success "Waypaper compatibility symlinks are in place"
+
+log "Installing NeoVim config
+rm -rf ~/.config/nvim
+ln -sfn "$(pwd)/dot-config/nvim" "$HOME/.config/nvim"
 
 section "User services"
 log "Enabling user services..."
