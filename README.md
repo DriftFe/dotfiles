@@ -16,6 +16,7 @@ This is my soft lavender hyprland setup for arch linux >~< it's got a glassy loo
 - Kitty
 - Dolphin
 - VS Code (Codium)
+- NeoVim
 - Spotify
 - Vesktop
 - Zen Browser
