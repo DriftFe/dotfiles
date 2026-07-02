@@ -203,17 +203,20 @@ if waybar_config.exists():
 
         for key in ("exec", "on-click", "on-scroll-up", "on-scroll-down"):
             check_config_path("waybar/config", f"{module}.{key}", values.get(key))
+hypr_dir = root / "hypr"
+hypr_files = []
 
-hypr_files = list((root / "hypr").glob("*.conf"))
-keys_file = root / "hypr/keys.conf"
-if keys_file.exists():
-    hypr_files.append(keys_file)
+for pattern in ("*.conf", "*.lua"):
+    hypr_files.extend(hypr_dir.glob(pattern))
 
-for hypr_file in hypr_files:
+for hypr_file in sorted(hypr_files):
     text = hypr_file.read_text(encoding="utf-8")
     for line_number, line in enumerate(text.splitlines(), 1):
-        check_config_path(str(hypr_file.relative_to(root)), f"line {line_number}", line)
-
+        check_config_path(
+            str(hypr_file.relative_to(root)),
+            f"line {line_number}",
+            line,
+        )
 if missing:
     for item in missing:
         print(item, file=sys.stderr)
