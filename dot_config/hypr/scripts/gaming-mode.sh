@@ -34,35 +34,26 @@ status() {
     fi
 }
 
-apply_keyword() {
-    local key="$1"
-    local value="$2"
-
-    hyprctl keyword "$key" "$value" >/dev/null
-}
-
 apply_gaming() {
-    apply_keyword animations:enabled false
-    apply_keyword decoration:blur:enabled false
-    apply_keyword decoration:shadow:enabled false
-    apply_keyword decoration:active_opacity 1.0
-    apply_keyword decoration:inactive_opacity 1.0
-    apply_keyword decoration:rounding 0
-    apply_keyword general:gaps_in 0
-    apply_keyword general:gaps_out 0
-    apply_keyword general:border_size 1
+    # `hyprctl keyword` only works with the legacy Hyprlang provider.  The
+    # active config is Lua, so apply the runtime override through `eval`.
+    hyprctl eval 'hl.config({
+        animations = { enabled = false },
+        decoration = {
+            blur = { enabled = false },
+            shadow = { enabled = false },
+            active_opacity = 1.0,
+            inactive_opacity = 1.0,
+            rounding = 0,
+        },
+        general = { gaps_in = 0, gaps_out = 0, border_size = 1 },
+    })' >/dev/null
 }
 
 apply_normal() {
-    apply_keyword animations:enabled "yes, please :)"
-    apply_keyword decoration:blur:enabled true
-    apply_keyword decoration:shadow:enabled true
-    apply_keyword decoration:active_opacity 0.9
-    apply_keyword decoration:inactive_opacity 0.8
-    apply_keyword decoration:rounding 10
-    apply_keyword general:gaps_in 5
-    apply_keyword general:gaps_out 10
-    apply_keyword general:border_size 2
+    # The source of truth is hyprland.lua.  Reload it instead of duplicating
+    # its defaults here, so future Lua config changes are restored correctly.
+    hyprctl reload >/dev/null
 }
 
 set_mode() {
@@ -80,18 +71,16 @@ set_mode() {
 
     mkdir -p "$STATE_DIR"
 
-    if [[ "$mode" == "on" ]]; then
-        if apply_gaming; then
-            printf 'on\n' > "$STATE_FILE"
-            notify "Gaming mode enabled" "Hyprland effects are disabled."
-            return 0
-        fi
-    else
-        if apply_normal; then
-            printf 'off\n' > "$STATE_FILE"
-            notify "Gaming mode disabled" "Hyprland effects are restored."
-            return 0
-        fi
+    if [[ "$mode" == "on" ]] && apply_gaming; then
+        printf 'on\n' > "$STATE_FILE"
+        notify "Gaming mode enabled" "Animations, blur, shadows, gaps, and rounding are disabled."
+        return 0
+    fi
+
+    if [[ "$mode" == "off" ]] && apply_normal; then
+        printf 'off\n' > "$STATE_FILE"
+        notify "Gaming mode disabled" "Settings restored from hyprland.lua."
+        return 0
     fi
 
     notify "Gaming mode failed" "Could not apply Hyprland settings."
