@@ -35,6 +35,8 @@
   "hyprland/workspaces": {
     "disable-scroll": false,
     "all-outputs": true,
+    "move-to-monitor": true,
+    "sort-by": "number",
     "format": "{icon}",
     "format-icons": {
   "1": "1",
