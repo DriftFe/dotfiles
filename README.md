@@ -46,13 +46,6 @@ This is my soft lavender hyprland setup for arch linux >~< it's got a glassy loo
 - animated borders and blur because flat desktops make me sad >:(
 
 ## installation ♡
-### one-line install
-if u trust me (plz trust me):
-```bash
-curl -sSL https://raw.githubusercontent.com/DriftFe/dotfiles/main/install.sh | bash
-```
-### manual install
-if u wanna see what's going on first, which is totally valid and smart of u >_<
 ```bash
 git clone https://github.com/DriftFe/dotfiles.git
 cd dotfiles
