@@ -1193,6 +1193,7 @@ PACMAN_PACKAGES=(
 AUR_PACKAGES=(
   wlogout
   waypaper
+  youtubemusic
   vesktop-bin
   zen-browser-bin
   ttf-meslo-nerd-font-powerlevel10k
