@@ -32,9 +32,9 @@ hl.bind(mainMod .. " + D", run("vesktop"))
 hl.bind(mainMod .. " + K", run("kdenlive"))
 hl.bind(mainMod .. " + P", run("powder"))
 hl.bind(mainMod .. " + C", run("vscodium"))
+hl.bind(mainMod .. " + Y", run("youtubemusic"))
 hl.bind(mainMod .. " + CTRL + S", run("spotify"))
 hl.bind(mainMod .. " + SHIFT + A", run("waydroid-toggle"))
-hl.bind("SUPER + SHIFT + A", run("ai-chat"))
 
 -----------------------
 --  Window Management
