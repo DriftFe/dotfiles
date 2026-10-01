@@ -1,964 +1,885 @@
 #!/usr/bin/env bash
 
+# ============================================================================
+
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$script_dir"
+# ----------------------------------------------------------------------------
+# Paths
+# ----------------------------------------------------------------------------
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+REPO_ROOT="$SCRIPT_DIR"
+
+DOTCONFIG="$REPO_ROOT/dot_config"
+HOME_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
+LOCAL_BIN="$HOME/.local/bin"
+LOCAL_SHARE="$HOME/.local/share"
+ZSHRC="$HOME/.zshrc"
 
 REPO_URL="https://github.com/DriftFe/dotfiles.git"
-WORK_DIR=""
-TMP_DIR=""
-FAILED_PACMAN_PACKAGES=()
-FAILED_AUR_PACKAGES=()
-CPU_PACKAGES=()
-GPU_PACKAGES=()
+
 FORCE_CONFIG_OVERRIDES="${FORCE_CONFIG_OVERRIDES:-0}"
 PRESERVE_EXISTING_CONFIGS="${PRESERVE_EXISTING_CONFIGS:-0}"
+SKIP_AUR="${SKIP_AUR:-0}"
+SKIP_ZSH="${SKIP_ZSH:-0}"
+SKIP_SERVICES="${SKIP_SERVICES:-0}"
 
-C_RESET='\033[0m'
-C_GREEN='\033[0;32m'
-C_YELLOW='\033[1;33m'
-C_RED='\033[0;31m'
-C_CYAN='\033[0;36m'
-C_PURPLE='\033[0;35m'
-C_PINK='\033[1;95m'
+TMP_DIR=""
 
-print_banner() {
-  echo -e "${C_PINK}"
-  cat <<'EOF'
+# ----------------------------------------------------------------------------
+# Colors
+# ----------------------------------------------------------------------------
+
+RESET='\033[0m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+PURPLE='\033[0;35m'
+PINK='\033[1;95m'
+
+# ----------------------------------------------------------------------------
+# State
+# ----------------------------------------------------------------------------
+
+PACMAN_FAILED=()
+AUR_FAILED=()
+
+CPU_PACKAGES=()
+GPU_PACKAGES=()
+
+CPU_LABEL="Unknown"
+GPU_LABEL="Unknown"
+
+# ----------------------------------------------------------------------------
+# Output
+# ----------------------------------------------------------------------------
+
+banner() {
+    printf '%b\n' "$PINK"
+    cat <<'EOF'
 ┌──────────────────────────────────────────────┐
-│          Lavender Dotfiles Installer         │
-│        soft setup, slightly dramatic >~<     │
+│          DriftFe / Lavender Setup            │
+│       Arch Linux + Hyprland workstation      │
 └──────────────────────────────────────────────┘
 EOF
-  echo -e "${C_RESET}"
+    printf '%b\n' "$RESET"
 }
 
 section() {
-  echo ""
-  echo -e "${C_CYAN}==>${C_RESET} ${C_PINK}$*${C_RESET}"
+    printf '\n%b==>%b %b%s%b\n' "$CYAN" "$RESET" "$PINK" "$*" "$RESET"
 }
 
-log()     { echo -e "${C_PURPLE}[+]${C_RESET} $*"; }
-success() { echo -e "${C_GREEN}[✓]${C_RESET} $*"; }
-warn()    { echo -e "${C_YELLOW}[!]${C_RESET} $*" >&2; }
-err()     { echo -e "${C_RED}[✗]${C_RESET} $*" >&2; exit 1; }
-info()    { echo -e "${C_CYAN}[i]${C_RESET} $*"; }
+log() {
+    printf '%b[+]%b %s\n' "$PURPLE" "$RESET" "$*"
+}
+
+info() {
+    printf '%b[i]%b %s\n' "$CYAN" "$RESET" "$*"
+}
+
+success() {
+    printf '%b[✓]%b %s\n' "$GREEN" "$RESET" "$*"
+}
+
+warn() {
+    printf '%b[!]%b %s\n' "$YELLOW" "$RESET" "$*" >&2
+}
+
+die() {
+    printf '%b[✗]%b %s\n' "$RED" "$RESET" "$*" >&2
+    exit 1
+}
+
+# ----------------------------------------------------------------------------
+# Cleanup
+# ----------------------------------------------------------------------------
 
 cleanup() {
-  [[ -n "$WORK_DIR" && -d "$WORK_DIR" ]] && rm -rf "$WORK_DIR"
-  [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]] && rm -rf "$TMP_DIR"
+    if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then
+        rm -rf -- "$TMP_DIR"
+    fi
 }
 
-have_cmd() {
-  command -v "$1" >/dev/null 2>&1
+trap cleanup EXIT
+
+# ----------------------------------------------------------------------------
+# Error reporting
+# ----------------------------------------------------------------------------
+
+on_error() {
+    local exit_code=$?
+    local line="${BASH_LINENO[0]:-unknown}"
+    local command="${BASH_COMMAND:-unknown}"
+
+    printf '\n%b[✗] Installer failed%b\n' "$RED" "$RESET" >&2
+    printf '    line: %s\n' "$line" >&2
+    printf '    command: %s\n' "$command" >&2
+    printf '    exit code: %s\n' "$exit_code" >&2
+
+    exit "$exit_code"
 }
 
-ensure_line_in_file() {
-  local file="$1"
-  local line="$2"
+trap on_error ERR
 
-  touch "$file"
-  grep -Fqx "$line" "$file" || printf '%s\n' "$line" >> "$file"
+# ----------------------------------------------------------------------------
+# Helpers
+# ----------------------------------------------------------------------------
+
+have() {
+    command -v "$1" >/dev/null 2>&1
 }
 
-config_overrides_enabled() {
-  [[ "$FORCE_CONFIG_OVERRIDES" == "1" ]]
+require_command() {
+    have "$1" || die "Required command not found: $1"
 }
 
-preserve_existing_configs_enabled() {
-  [[ "$PRESERVE_EXISTING_CONFIGS" == "1" && "$FORCE_CONFIG_OVERRIDES" != "1" ]]
+config_override_enabled() {
+    [[ "$FORCE_CONFIG_OVERRIDES" == "1" ]]
 }
 
-install_file_if_changed() {
-  local source_file="$1"
-  local dest_file="$2"
-  local mode="$3"
-  local label="$4"
-
-  [[ -f "$source_file" ]] || return 0
-  mkdir -p "$(dirname -- "$dest_file")"
-
-  if preserve_existing_configs_enabled && [[ -e "$dest_file" ]]; then
-    info "Keeping existing $label"
-    return 0
-  fi
-
-  if [[ -f "$dest_file" ]] && cmp -s "$source_file" "$dest_file"; then
-    info "$label is already current"
-    return 0
-  fi
-
-  install -m "$mode" "$source_file" "$dest_file"
-  success "Updated $label"
+preserve_existing_enabled() {
+    [[ "$PRESERVE_EXISTING_CONFIGS" == "1" &&
+       "$FORCE_CONFIG_OVERRIDES" != "1" ]]
 }
 
-install_generated_file_if_changed() {
-  local source_file="$1"
-  local dest_file="$2"
-  local mode="$3"
-  local label="$4"
+# ----------------------------------------------------------------------------
+# Root / OS checks
+# ----------------------------------------------------------------------------
 
-  install_file_if_changed "$source_file" "$dest_file" "$mode" "$label"
-  rm -f "$source_file"
+check_environment() {
+    section "Environment checks"
+
+    [[ "$EUID" -ne 0 ]] ||
+        die "Do not run this installer as root. Run it as your normal user."
+
+    have pacman ||
+        die "This installer supports Arch Linux only."
+
+    [[ -d /etc/pacman.d ]] ||
+        die "This does not look like a normal Arch Linux installation."
+
+    if [[ "${XDG_CURRENT_DESKTOP:-}" == "" ]]; then
+        info "No desktop session detected. Continuing."
+    fi
+
+    if [[ ! -d "$DOTCONFIG" ]]; then
+        warn "Repository dot_config directory was not found."
+
+        require_command git
+
+        TMP_DIR="$(mktemp -d)"
+
+        log "Cloning the latest dotfiles repository..."
+
+        git clone \
+            --depth=1 \
+            "$REPO_URL" \
+            "$TMP_DIR/dotfiles"
+
+        REPO_ROOT="$TMP_DIR/dotfiles"
+        DOTCONFIG="$REPO_ROOT/dot_config"
+
+        [[ -d "$DOTCONFIG" ]] ||
+            die "Cloned repository does not contain dot_config/."
+    fi
+
+    success "Environment looks valid."
 }
 
-gsettings_value_is() {
-  local schema="$1"
-  local key="$2"
-  local expected="$3"
-  local current=""
+# ----------------------------------------------------------------------------
+# Pacman
+# ----------------------------------------------------------------------------
 
-  current="$(gsettings get "$schema" "$key" 2>/dev/null || true)"
-  [[ "$current" == "$expected" ]]
+enable_multilib() {
+    local pacman_conf="/etc/pacman.conf"
+
+    if awk '
+        /^\[multilib\]$/ { found=1 }
+        END { exit(found ? 0 : 1) }
+    ' "$pacman_conf"; then
+        return 0
+    fi
+
+    warn "multilib is not enabled."
+    info "Some 32-bit applications may therefore lack 32-bit libraries."
+
+    read -r -p "Enable multilib now? [Y/n] " answer
+
+    case "${answer:-Y}" in
+        [Yy]|[Yy][Ee][Ss])
+            local tmp
+            tmp="$(mktemp)"
+
+            awk '
+                BEGIN { done=0 }
+
+                /^[[:space:]]*#[[:space:]]*\[multilib\][[:space:]]*$/ {
+                    print "[multilib]"
+                    done=1
+                    next
+                }
+
+                /^[[:space:]]*#[[:space:]]*Include[[:space:]]*=[[:space:]]*\/etc\/pacman.d\/mirrorlist[[:space:]]*$/ && done {
+                    print "Include = /etc/pacman.d/mirrorlist"
+                    next
+                }
+
+                { print }
+
+                END {
+                    if (!done) {
+                        print ""
+                        print "[multilib]"
+                        print "Include = /etc/pacman.d/mirrorlist"
+                    }
+                }
+            ' "$pacman_conf" > "$tmp"
+
+            install -m 644 "$tmp" "$pacman_conf"
+            rm -f "$tmp"
+
+            success "Enabled multilib."
+            ;;
+        *)
+            info "Leaving multilib disabled."
+            ;;
+    esac
 }
 
-validate_json_file() {
-  local file="$1"
+configure_pacman() {
+    local pacman_conf="/etc/pacman.conf"
+    local tmp
 
-  [[ -f "$file" ]] || err "Missing required config file: $file"
+    tmp="$(mktemp)"
 
-  if have_cmd python3; then
-    python3 -m json.tool "$file" >/dev/null || err "Invalid JSON: $file"
-  else
-    warn "python3 not found; skipping JSON validation for $file"
-  fi
+    awk '
+        /^\[options\]$/ {
+            in_options=1
+            print
+            next
+        }
+
+        /^\[/ && in_options {
+            if (!color_seen) {
+                print "Color"
+            }
+
+            if (!candy_seen) {
+                print "ILoveCandy"
+            }
+
+            in_options=0
+        }
+
+        in_options && /^[[:space:]]*#[[:space:]]*Color[[:space:]]*$/ {
+            print "Color"
+            color_seen=1
+            next
+        }
+
+        in_options && /^[[:space:]]*Color[[:space:]]*$/ {
+            color_seen=1
+        }
+
+        in_options && /^[[:space:]]*ILoveCandy[[:space:]]*$/ {
+            candy_seen=1
+        }
+
+        { print }
+
+        END {
+            if (in_options) {
+                if (!color_seen) {
+                    print "Color"
+                }
+
+                if (!candy_seen) {
+                    print "ILoveCandy"
+                }
+            }
+        }
+    ' "$pacman_conf" > "$tmp"
+
+    install -m 644 "$tmp" "$pacman_conf"
+    rm -f "$tmp"
+
+    success "Configured pacman."
 }
 
-validate_css_file() {
-  local file="$1"
-  local first_nonempty=""
+update_system() {
+    section "System update"
 
-  [[ -f "$file" ]] || err "Missing required CSS file: $file"
+    configure_pacman
 
-  first_nonempty="$(sed -n '/[^[:space:]]/ { s/^[[:space:]]*//; p; q; }' "$file")"
-  if [[ "$first_nonempty" == \{* || "$first_nonempty" == \[* ]]; then
-    err "$file looks like JSON, not CSS"
-  fi
+    log "Synchronizing package databases and upgrading the system..."
 
-  grep -Eq '(^|[[:space:]])window#waybar[[:space:]]*\{' "$file" || \
-    err "$file does not look like a Waybar stylesheet"
+    sudo pacman -Syu --noconfirm
+
+    success "System is up to date."
 }
 
-validate_shell_scripts() {
-  local file
+# ----------------------------------------------------------------------------
+# Hardware detection
+# ----------------------------------------------------------------------------
 
-  while IFS= read -r -d '' file; do
-    bash -n "$file" || err "Shell syntax check failed: $file"
-  done < <(find "$SRC_DOTCONFIG" -type f -name "*.sh" -print0)
+detect_cpu() {
+    section "Hardware detection"
+
+    local cpu_vendor
+    cpu_vendor="$(awk -F: '/^vendor_id/ {gsub(/ /, "", $2); print $2; exit}' /proc/cpuinfo)"
+
+    case "$cpu_vendor" in
+        GenuineIntel)
+            CPU_LABEL="Intel"
+            CPU_PACKAGES=(intel-ucode)
+            ;;
+        AuthenticAMD)
+            CPU_LABEL="AMD"
+            CPU_PACKAGES=(amd-ucode)
+            ;;
+        *)
+            CPU_LABEL="Unknown"
+            CPU_PACKAGES=()
+            ;;
+    esac
+
+    success "CPU: $CPU_LABEL"
+
+    if (( ${#CPU_PACKAGES[@]} )); then
+        info "Microcode package: ${CPU_PACKAGES[*]}"
+    fi
 }
 
-validate_python_scripts() {
-  local file
+detect_gpu() {
+    local gpu_info=""
 
-  if ! have_cmd python3; then
-    warn "python3 not found; skipping Python syntax validation"
-    return 0
-  fi
+    if have lspci; then
+        gpu_info="$(lspci -nn 2>/dev/null | grep -Ei \
+            'VGA compatible controller|3D controller|Display controller' || true)"
+    fi
 
-  while IFS= read -r -d '' file; do
-    python3 -m py_compile "$file" || err "Python syntax check failed: $file"
-  done < <(find "$SRC_DOTCONFIG" -type f -name "*.py" -print0)
-}
-
-validate_referenced_config_files() {
-  if ! have_cmd python3; then
-    warn "python3 not found; skipping referenced script validation"
-    return 0
-  fi
-
-  python3 - "$SRC_DOTCONFIG" <<'PY'
-import json
-import re
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1])
-missing = []
-
-def check_config_path(source, label, command):
-    if not isinstance(command, str):
+    if [[ -z "$gpu_info" ]]; then
+        GPU_LABEL="Unknown"
+        warn "Could not identify the GPU with lspci."
         return
+    fi
 
-    for match in re.finditer(r'~/(?:\.config)/([^"\'\s,;&|]+)', command):
-        rel = match.group(1)
-        target = root / rel
-        if not target.exists():
-            missing.append(f"{source}: {label} references missing ~/.config/{rel}")
-
-waybar_config = root / "waybar/config"
-if waybar_config.exists():
-    with waybar_config.open(encoding="utf-8") as f:
-        config = json.load(f)
-
-    for section in ("modules-left", "modules-center", "modules-right"):
-        for module in config.get(section, []):
-            if module.startswith("custom/") and module not in config:
-                missing.append(f"waybar/config: {section} lists {module}, but no module config exists")
-
-    for module, values in config.items():
-        if not isinstance(values, dict):
-            continue
-
-        for key in ("exec", "on-click", "on-scroll-up", "on-scroll-down"):
-            check_config_path("waybar/config", f"{module}.{key}", values.get(key))
-hypr_dir = root / "hypr"
-hypr_files = []
-
-for pattern in ("*.conf", "*.lua"):
-    hypr_files.extend(hypr_dir.glob(pattern))
-
-for hypr_file in sorted(hypr_files):
-    text = hypr_file.read_text(encoding="utf-8")
-    for line_number, line in enumerate(text.splitlines(), 1):
-        check_config_path(
-            str(hypr_file.relative_to(root)),
-            f"line {line_number}",
-            line,
+    if grep -qi 'NVIDIA' <<< "$gpu_info"; then
+        GPU_LABEL="NVIDIA"
+        GPU_PACKAGES=(
+            mesa
+            vulkan-icd-loader
+            vulkan-tools
+            libva-utils
         )
-if missing:
-    for item in missing:
-        print(item, file=sys.stderr)
-    sys.exit(1)
-PY
-  local status=$?
-  (( status == 0 )) || err "One or more configs reference missing files"
+
+    elif grep -qi 'AMD\|ATI' <<< "$gpu_info"; then
+        GPU_LABEL="AMD"
+        GPU_PACKAGES=(
+            mesa
+            vulkan-radeon
+            vulkan-icd-loader
+            vulkan-tools
+            libva-utils
+        )
+
+    elif grep -qi 'Intel' <<< "$gpu_info"; then
+        GPU_LABEL="Intel"
+        GPU_PACKAGES=(
+            mesa
+            intel-media-driver
+            vulkan-intel
+            vulkan-icd-loader
+            vulkan-tools
+            libva-utils
+        )
+
+    else
+        GPU_LABEL="Unknown"
+        GPU_PACKAGES=(
+            mesa
+            vulkan-icd-loader
+            vulkan-tools
+        )
+    fi
+
+    success "GPU: $GPU_LABEL"
+
+    while IFS= read -r line; do
+        info "$line"
+    done <<< "$gpu_info"
 }
 
-validate_source_dotfiles() {
-  section "Config validation"
-  log "Checking source dotfiles before copying..."
+# ----------------------------------------------------------------------------
+# Package lists
+# ----------------------------------------------------------------------------
 
-  validate_json_file "$SRC_DOTCONFIG/waybar/config"
-  validate_css_file "$SRC_DOTCONFIG/waybar/style.css"
-  validate_shell_scripts
-  validate_python_scripts
-  validate_referenced_config_files
+build_package_lists() {
+    PACMAN_PACKAGES=(
+        # Core tools
+        git
+        jq
+        neovim
+        python
+        python-pip
+        zsh
+        rsync
+        curl
+        wget
+        unzip
+        base-devel
 
-  if grep -R -nE '^[[:space:]]*pseudotile[[:space:]]*=' "$SRC_DOTCONFIG/hypr" >/dev/null 2>&1; then
-    grep -R -nE '^[[:space:]]*pseudotile[[:space:]]*=' "$SRC_DOTCONFIG/hypr" >&2 || true
-    err "Found obsolete Hyprland pseudotile config"
-  fi
+        # Desktop / Hyprland
+        hyprland
+        hyprlock
+        waybar
+        wofi
+        mako
+        libnotify
 
-  success "Source dotfiles passed basic validation"
+        # Terminal
+        kitty
+
+        # Wallpaper
+        awww
+
+        # Wayland utilities
+        wl-clipboard
+        cliphist
+        brightnessctl
+        grim
+        slurp
+
+        # File manager / media
+        dolphin
+        mpv
+        imv
+
+        # XDG / KDE integration
+        archlinux-xdg-menu
+        kio
+        kservice
+        shared-mime-info
+        xdg-user-dirs
+
+        # Networking
+        networkmanager
+        network-manager-applet
+
+        # Audio
+        pipewire
+        pipewire-alsa
+        pipewire-pulse
+        wireplumber
+        pavucontrol
+
+        # Bluetooth
+        bluez
+        bluez-utils
+        blueman
+
+        # Login / GNOME integration
+        gdm
+        gnome-session
+        gnome-shell
+        gnome-desktop-4
+        gsettings-desktop-schemas
+        gsettings-system-schemas
+        mutter
+
+        # Desktop helpers
+        gnome-keyring
+        polkit-gnome
+        udisks2
+        playerctl
+        xsettingsd
+        qt5ct
+        touchegg
+
+        # Visualizer
+        cava
+
+        # Fonts
+        fontconfig
+        noto-fonts
+        noto-fonts-cjk
+        noto-fonts-emoji
+        noto-fonts-extra
+        ttf-indic-otf
+        otf-ipaexfont
+        ttf-jigmo
+        wqy-zenhei
+        wqy-microhei
+        ttf-roboto
+        ttf-jetbrains-mono
+        ttf-jetbrains-mono-nerd
+        ttf-meslo-nerd
+        ttf-dejavu
+        ttf-liberation
+        ttf-nerd-fonts-symbols
+        ttf-font-awesome
+        gnu-free-fonts
+
+        # Portals
+        xdg-desktop-portal
+        xdg-desktop-portal-hyprland
+
+        # Development / CLI
+        ripgrep
+        fd
+
+        # Screenshot editing
+        swappy
+    )
+
+    AUR_PACKAGES=(
+        wlogout
+        waypaper
+        youtubemusic
+        vesktop-bin
+        zen-browser-bin
+        gpu-screen-recorder
+        grimblast-git
+        bibata-cursor-theme
+        adw-gtk3
+        cbonsai
+    )
+}
+
+# ----------------------------------------------------------------------------
+# Package installation
+# ----------------------------------------------------------------------------
+
+install_required_packages() {
+    section "Installing official packages"
+
+    local missing=()
+    local pkg
+
+    for pkg in "${PACMAN_PACKAGES[@]}"; do
+        if ! pacman -Si "$pkg" >/dev/null 2>&1; then
+            warn "Official repository package not found: $pkg"
+            missing+=("$pkg")
+        fi
+    done
+
+    if (( ${#missing[@]} )); then
+        printf '\n'
+        warn "The following packages are unavailable in your enabled repositories:"
+        printf '  %s\n' "${missing[@]}"
+        die "Package list contains unavailable official packages."
+    fi
+
+    sudo pacman -S --needed --noconfirm \
+        "${PACMAN_PACKAGES[@]}" \
+        "${CPU_PACKAGES[@]}" \
+        "${GPU_PACKAGES[@]}"
+
+    success "Official packages installed."
+}
+
+install_yay() {
+    if have yay; then
+        success "yay is already installed."
+        return
+    fi
+
+    section "Installing yay"
+
+    have git || die "git is required to build yay."
+    have makepkg || die "makepkg is required to build yay."
+
+    TMP_DIR="$(mktemp -d)"
+
+    git clone \
+        --depth=1 \
+        https://aur.archlinux.org/yay.git \
+        "$TMP_DIR/yay"
+
+    (
+        cd "$TMP_DIR/yay"
+        makepkg -si --noconfirm
+    )
+
+    have yay ||
+        die "yay installation failed."
+
+    success "yay installed."
+}
+
+install_aur_packages() {
+    (( SKIP_AUR == 0 )) ||
+        return 0
+
+    section "Installing AUR packages"
+
+    install_yay
+
+    local pkg
+
+    for pkg in "${AUR_PACKAGES[@]}"; do
+        info "Installing AUR package: $pkg"
+
+        if yay -S \
+            --needed \
+            --noconfirm \
+            --answerclean None \
+            --answerdiff None \
+            "$pkg"; then
+
+            success "Installed $pkg"
+        else
+            warn "AUR package failed: $pkg"
+            AUR_FAILED+=("$pkg")
+        fi
+    done
+}
+
+# ----------------------------------------------------------------------------
+# Config validation
+# ----------------------------------------------------------------------------
+
+validate_source_configs() {
+    section "Validating dotfiles"
+
+    [[ -d "$DOTCONFIG" ]] ||
+        die "Missing dot_config directory."
+
+    if [[ -f "$DOTCONFIG/waybar/config" ]]; then
+        if have python3; then
+            python3 -m json.tool \
+                "$DOTCONFIG/waybar/config" \
+                >/dev/null ||
+                die "Invalid Waybar JSON."
+        fi
+    fi
+
+    if [[ -f "$DOTCONFIG/waybar/style.css" ]]; then
+        grep -Eq \
+            '(^|[[:space:]])window#waybar[[:space:]]*\{' \
+            "$DOTCONFIG/waybar/style.css" ||
+            warn "Waybar stylesheet does not contain the expected window#waybar selector."
+    fi
+
+    while IFS= read -r -d '' file; do
+        bash -n "$file" ||
+            die "Shell syntax error: $file"
+    done < <(
+        find "$DOTCONFIG" \
+            -type f \
+            -name '*.sh' \
+            -print0
+    )
+
+    while IFS= read -r -d '' file; do
+        if have python3; then
+            python3 -m py_compile "$file" ||
+                die "Python syntax error: $file"
+        fi
+    done < <(
+        find "$DOTCONFIG" \
+            -type f \
+            -name '*.py' \
+            -print0
+    )
+
+    if grep -R -nE \
+        '^[[:space:]]*pseudotile[[:space:]]*=' \
+        "$DOTCONFIG/hypr" \
+        >/dev/null 2>&1; then
+
+        die "Obsolete Hyprland pseudotile setting detected."
+    fi
+
+    success "Source configuration passed syntax checks."
+}
+
+# ----------------------------------------------------------------------------
+# Safe configuration installation
+# ----------------------------------------------------------------------------
+
+copy_file() {
+    local src="$1"
+    local dst="$2"
+    local mode="${3:-644}"
+    local label="${4:-file}"
+
+    [[ -f "$src" ]] || return 0
+
+    mkdir -p "$(dirname "$dst")"
+
+    if preserve_existing_enabled && [[ -e "$dst" ]]; then
+        info "Preserving existing $label"
+        return 0
+    fi
+
+    if [[ -f "$dst" ]] && cmp -s "$src" "$dst"; then
+        info "$label already current"
+        return 0
+    fi
+
+    install -m "$mode" "$src" "$dst"
+
+    success "Installed $label"
 }
 
 sync_dotfiles() {
-  local rsync_args=(
-    -avh
-    --checksum
-    --mkpath
-    --exclude '/.zshrc'
-    --exclude '/local_bin/'
-    --exclude '/local_share/'
-    --exclude '/kde-color-schemes/'
-  )
+    section "Installing dotfiles"
 
-  if preserve_existing_configs_enabled; then
-    rsync_args+=(--ignore-existing)
-  fi
+    mkdir -p "$HOME_CONFIG"
 
-  if rsync "${rsync_args[@]}" "$SRC_DOTCONFIG"/ "$DEST_CONFIG"/; then
-    success "Synced changed dotfiles into $DEST_CONFIG"
-  else
-    err "Dotfile sync failed"
-  fi
-}
+    local args=(
+        -a
+        --checksum
+        --mkpath
+        --exclude '/.zshrc'
+        --exclude '/local_bin/'
+        --exclude '/local_share/'
+        --exclude '/kde-color-schemes/'
+    )
 
-install_zshrc() {
-  local source_file="$SRC_DOTCONFIG/.zshrc"
-
-  [[ -f "$source_file" ]] || return 0
-
-  install_file_if_changed "$source_file" "$ZSHRC" 644 "Zsh config"
-}
-
-install_mimeapps_defaults() {
-  local source_file="$SRC_DOTCONFIG/mimeapps.list"
-  local dest_file="$DEST_CONFIG/mimeapps.list"
-
-  [[ -f "$source_file" ]] || return 0
-
-  install_file_if_changed "$source_file" "$dest_file" 644 "default application associations"
-}
-
-install_local_bin_files() {
-  local src_dir="$SRC_DOTCONFIG/local_bin"
-  local dest_dir="$HOME/.local/bin"
-  local rsync_args=(-avh --checksum --mkpath)
-
-  [[ -d "$src_dir" ]] || return 0
-
-  preserve_existing_configs_enabled && rsync_args+=(--ignore-existing)
-
-  mkdir -p "$dest_dir"
-  rsync "${rsync_args[@]}" "$src_dir"/ "$dest_dir"/
-  find "$dest_dir" -maxdepth 1 -type f -exec chmod +x {} +
-  success "Synced local helper commands"
-}
-
-install_local_applications() {
-  local src_dir="$SRC_DOTCONFIG/local_share/applications"
-  local dest_dir="$HOME/.local/share/applications"
-  local dolphin_desktop="$dest_dir/org.kde.dolphin.desktop"
-  local dolphin_exec="Exec=$HOME/.local/bin/dolphin-themed %u"
-  local rsync_args=(-avh --checksum --mkpath)
-
-  [[ -d "$src_dir" ]] || return 0
-
-  preserve_existing_configs_enabled && rsync_args+=(--ignore-existing)
-
-  mkdir -p "$dest_dir"
-  rsync "${rsync_args[@]}" "$src_dir"/ "$dest_dir"/
-
-  if [[ -f "$dolphin_desktop" ]]; then
-    if ! grep -Fxq "$dolphin_exec" "$dolphin_desktop"; then
-      sed -i "s|^Exec=.*|$dolphin_exec|" "$dolphin_desktop"
-      success "Updated Dolphin desktop entry"
-    fi
-  fi
-
-  success "Synced local desktop entry overrides"
-}
-
-normalize_user_config_paths() {
-  local dolphinrc="$DEST_CONFIG/dolphinrc"
-  local bookmarks="$DEST_CONFIG/private_gtk-3.0/bookmarks"
-
-  if [[ -f "$dolphinrc" ]]; then
-    if grep -Eq '^HomeUrl=file:///home/[^/[:space:]]*' "$dolphinrc"; then
-      sed -i "s|^HomeUrl=file:///home/[^/[:space:]]*|HomeUrl=file://$HOME|" "$dolphinrc"
-      success "Normalized Dolphin home path"
-    fi
-  fi
-
-  if [[ -f "$bookmarks" ]]; then
-    if grep -Eq 'file:///home/[^/]*/' "$bookmarks"; then
-      sed -i "s|file:///home/[^/]*/|file://$HOME/|g" "$bookmarks"
-      success "Normalized GTK bookmark paths"
-    fi
-  fi
-}
-
-enable_system_service() {
-  local unit="$1"
-
-  if systemctl list-unit-files "$unit" --type=service --no-legend 2>/dev/null | awk '{print $1}' | grep -Fxq "$unit"; then
-    sudo systemctl unmask "$unit" >/dev/null 2>&1 || true
-    sudo systemctl enable "$unit"
-    success "Enabled $unit"
-  else
-    warn "$unit not found, skipping"
-  fi
-}
-
-disable_system_service_if_enabled() {
-  local unit="$1"
-
-  if systemctl list-unit-files --type=service | awk '{print $1}' | grep -Fxq "$unit"; then
-    if systemctl is-enabled "$unit" >/dev/null 2>&1; then
-      sudo systemctl disable "$unit"
-      success "Disabled $unit"
-    fi
-  fi
-}
-
-set_default_gdm_session() {
-  local session="$1"
-  local dmrc="$HOME/.dmrc"
-  local tmp_file=""
-
-  if [[ ! -f "$dmrc" ]] || config_overrides_enabled; then
-    printf '[Desktop]\nSession=%s\n' "$session" > "$dmrc"
-    chmod 644 "$dmrc"
-    success "Set $session as the default desktop session in $dmrc"
-  else
-    info "Keeping existing $dmrc unchanged"
-  fi
-
-  if [[ -d /var/lib/AccountsService ]] || have_cmd accounts-daemon; then
-    if [[ ! -f "/var/lib/AccountsService/users/$USER" ]] || config_overrides_enabled; then
-      tmp_file="$(mktemp)"
-      printf '[User]\nSession=%s\nXSession=%s\nSessionType=wayland\n' "$session" "$session" > "$tmp_file"
-      sudo install -d -m755 /var/lib/AccountsService/users
-      sudo install -m644 "$tmp_file" "/var/lib/AccountsService/users/$USER"
-      rm -f "$tmp_file"
-      success "Configured AccountsService to default to $session for $USER"
-    else
-      info "Keeping existing AccountsService session config for $USER"
-    fi
-  else
-    warn "AccountsService not detected; wrote $dmrc only"
-  fi
-}
-
-set_system_default_target() {
-  local target="$1"
-
-  if systemctl list-unit-files --type=target | awk '{print $1}' | grep -Fxq "$target"; then
-    sudo systemctl set-default "$target"
-    success "Set default systemd target to $target"
-  else
-    warn "$target not found, skipping"
-  fi
-}
-
-install_hyprland_session_for_gdm() {
-  local session_dir="/usr/share/wayland-sessions"
-  local session_file="$session_dir/hyprland.desktop"
-  local source_candidates=(
-    "/usr/share/hyprland/hyprland.desktop"
-    "/usr/share/wayland-sessions/hyprland.desktop"
-  )
-  local candidate
-
-  if [[ -f "$session_file" ]]; then
-    success "Hyprland GDM session entry is present"
-    return 0
-  fi
-
-  for candidate in "${source_candidates[@]}"; do
-    if [[ -f "$candidate" ]]; then
-      sudo install -d -m755 "$session_dir"
-      sudo install -m644 "$candidate" "$session_file"
-      success "Installed Hyprland session entry for GDM"
-      return 0
-    fi
-  done
-
-  warn "Hyprland session entry was not found; GDM may not list Hyprland until the desktop file is installed"
-}
-
-configure_bluetooth_defaults() {
-  local bluetooth_conf="/etc/bluetooth/main.conf"
-  local tmp_file=""
-
-  [[ -f "$bluetooth_conf" ]] || return 0
-
-  tmp_file="$(mktemp)"
-  awk '
-    BEGIN { updated=0 }
-    /^[[:space:]]*#?[[:space:]]*AutoEnable[[:space:]]*=/ {
-      print "AutoEnable=true"
-      updated=1
-      next
-    }
-    { print }
-    END {
-      if (!updated) {
-        print "AutoEnable=true"
-      }
-    }
-  ' "$bluetooth_conf" > "$tmp_file"
-  sudo install -m644 "$tmp_file" "$bluetooth_conf"
-  rm -f "$tmp_file"
-  success "Configured Bluetooth to power adapters on at startup"
-}
-
-install_gtk_defaults() {
-  local gtk3_dir="$DEST_CONFIG/gtk-3.0"
-  local gtk4_dir="$DEST_CONFIG/gtk-4.0"
-  local gtk3_file="$gtk3_dir/settings.ini"
-  local gtk4_file="$gtk4_dir/settings.ini"
-  local tmp_file=""
-
-  mkdir -p "$gtk3_dir" "$gtk4_dir"
-
-  tmp_file="$(mktemp)"
-  cat > "$tmp_file" <<'EOF'
-[Settings]
-gtk-theme-name=adw-gtk3-dark
-gtk-application-prefer-dark-theme=true
-gtk-cursor-theme-name=Bibata-Modern-Classic
-gtk-cursor-theme-size=24
-gtk-font-name=Noto Sans, 10
-gtk-icon-theme-name=Adwaita
-gtk-decoration-layout=icon:minimize,maximize,close
-gtk-enable-animations=true
-gtk-primary-button-warps-slider=true
-EOF
-  install_generated_file_if_changed "$tmp_file" "$gtk3_file" 644 "GTK 3 dark theme defaults"
-
-  tmp_file="$(mktemp)"
-  cat > "$tmp_file" <<'EOF'
-[Settings]
-gtk-theme-name=adw-gtk3-dark
-gtk-application-prefer-dark-theme=true
-gtk-cursor-theme-name=Bibata-Modern-Classic
-gtk-cursor-theme-size=24
-gtk-font-name=Noto Sans, 10
-gtk-icon-theme-name=Adwaita
-gtk-decoration-layout=icon:minimize,maximize,close
-gtk-enable-animations=true
-gtk-primary-button-warps-slider=true
-EOF
-  install_generated_file_if_changed "$tmp_file" "$gtk4_file" 644 "GTK 4 dark theme defaults"
-}
-
-install_kde_theme_files() {
-  local data_dir="$HOME/.local/share"
-  local source_dir="$SRC_DOTCONFIG/kde-color-schemes"
-  local rsync_args=(-avh --checksum --mkpath)
-
-  if [[ -d "$source_dir" ]]; then
-    preserve_existing_configs_enabled && rsync_args+=(--ignore-existing)
-    mkdir -p "$data_dir/color-schemes"
-    rsync "${rsync_args[@]}" "$source_dir"/ "$data_dir/color-schemes"/
-    success "Synced KDE color schemes"
-  fi
-
-  install_file_if_changed "$SRC_DOTCONFIG/kdeglobals" "$DEST_CONFIG/kdeglobals" 644 "KDE global theme defaults"
-  install_file_if_changed "$SRC_DOTCONFIG/dolphin.qss" "$DEST_CONFIG/dolphin.qss" 644 "Dolphin stylesheet"
-}
-
-install_kio_defaults() {
-  local kiorc_file="$DEST_CONFIG/kiorc"
-
-  mkdir -p "$DEST_CONFIG"
-  touch "$kiorc_file"
-
-  if grep -q '^\[General\]' "$kiorc_file"; then
-    if grep -q '^TerminalApplication=' "$kiorc_file"; then
-      grep -Fxq 'TerminalApplication=kitty' "$kiorc_file" || \
-        sed -i 's|^TerminalApplication=.*|TerminalApplication=kitty|' "$kiorc_file"
-    else
-      sed -i '/^\[General\]/a TerminalApplication=kitty' "$kiorc_file"
+    if preserve_existing_enabled; then
+        args+=(--ignore-existing)
     fi
 
-    if grep -q '^TerminalService=' "$kiorc_file"; then
-      grep -Fxq 'TerminalService=kitty.desktop' "$kiorc_file" || \
-        sed -i 's|^TerminalService=.*|TerminalService=kitty.desktop|' "$kiorc_file"
-    else
-      sed -i '/^\[General\]/a TerminalService=kitty.desktop' "$kiorc_file"
-    fi
-  else
-    cat >> "$kiorc_file" <<'EOF'
+    rsync \
+        "${args[@]}" \
+        "$DOTCONFIG/" \
+        "$HOME_CONFIG/"
 
-[General]
-TerminalApplication=kitty
-TerminalService=kitty.desktop
-EOF
-  fi
-
-  success "Configured KDE apps to use Kitty as the terminal"
+    success "Configuration synchronized."
 }
 
-set_media_mime_defaults() {
-  local mpv_desktop="/usr/share/applications/mpv.desktop"
-  local imv_desktop="/usr/share/applications/imv.desktop"
-  local mimes=()
-  local mime
+install_special_files() {
+    copy_file \
+        "$DOTCONFIG/.zshrc" \
+        "$ZSHRC" \
+        644 \
+        "Zsh configuration"
 
-  log "Setting media file defaults to mpv and imv..."
+    copy_file \
+        "$DOTCONFIG/mimeapps.list" \
+        "$HOME_CONFIG/mimeapps.list" \
+        644 \
+        "MIME defaults"
 
-  if [[ -f "$mpv_desktop" ]]; then
-    IFS=';' read -r -a mimes <<< "$(grep -m1 '^MimeType=' "$mpv_desktop" | cut -d= -f2-)"
-    for mime in "${mimes[@]}"; do
-      [[ -n "$mime" ]] && xdg-mime default mpv.desktop "$mime" || true
-    done
-  else
-    warn "mpv.desktop not found; video defaults may not be registered"
-  fi
+    # Local binaries
+    if [[ -d "$DOTCONFIG/local_bin" ]]; then
+        mkdir -p "$LOCAL_BIN"
 
-  if [[ -f "$imv_desktop" ]]; then
-    IFS=';' read -r -a mimes <<< "$(grep -m1 '^MimeType=' "$imv_desktop" | cut -d= -f2-)"
-    for mime in "${mimes[@]}"; do
-      [[ -n "$mime" ]] && xdg-mime default imv.desktop "$mime" || true
-    done
-  else
-    warn "imv.desktop not found; image defaults may not be registered"
-  fi
-}
-
-rebuild_kde_service_cache() {
-  rm -f "$HOME"/.cache/ksycoca6_* 2>/dev/null || true
-
-  if have_cmd update-mime-database; then
-    sudo update-mime-database /usr/share/mime || warn "Could not update shared MIME database"
-  fi
-
-  if have_cmd kbuildsycoca6; then
-    XDG_MENU_PREFIX=arch- kbuildsycoca6 --noincremental || warn "Could not rebuild KDE service cache"
-  fi
-}
-
-configure_kde_application_menu() {
-  local arch_menu="/etc/xdg/menus/arch-applications.menu"
-  local fallback_menu="/etc/xdg/menus/applications.menu"
-
-  if [[ -e "$arch_menu" && ! -e "$fallback_menu" ]]; then
-    sudo ln -sf "$arch_menu" "$fallback_menu"
-    success "Linked KDE fallback applications menu to Arch's XDG menu"
-  elif [[ -e "$fallback_menu" ]]; then
-    success "KDE fallback applications menu is present"
-  else
-    warn "$arch_menu is missing; install archlinux-xdg-menu if Dolphin cannot remember file associations"
-  fi
-}
-
-configure_zsh_theme() {
-  local desired_theme='ZSH_THEME="powerlevel10k/powerlevel10k"'
-
-  [[ -f "$ZSHRC" ]] || return 0
-
-  if grep -q '^ZSH_THEME=' "$ZSHRC"; then
-    if config_overrides_enabled || grep -Eq '^ZSH_THEME="?(robbyrussell|random)"?$' "$ZSHRC"; then
-      sed -i 's|^ZSH_THEME=.*|'"$desired_theme"'|' "$ZSHRC"
-      success "Configured Powerlevel10k as the active Oh My Zsh theme"
-    else
-      info "Keeping existing ZSH_THEME in $ZSHRC"
-    fi
-  else
-    ensure_line_in_file "$ZSHRC" "$desired_theme"
-    success "Added Powerlevel10k theme to $ZSHRC"
-  fi
-}
-
-ensure_zsh_plugin_enabled() {
-  local plugin="$1"
-  local plugins_line=""
-  local plugin_list=()
-  local item=""
-
-  [[ -f "$ZSHRC" ]] || return 0
-
-  if grep -q '^plugins=' "$ZSHRC"; then
-    plugins_line="$(grep '^plugins=' "$ZSHRC" | head -n1)"
-    plugins_line="${plugins_line#plugins=}"
-    plugins_line="${plugins_line#\(}"
-    plugins_line="${plugins_line%\)}"
-
-    read -r -a plugin_list <<< "$plugins_line"
-
-    for item in "${plugin_list[@]}"; do
-      if [[ "$item" == "$plugin" ]]; then
-        info "Keeping existing plugins= line in $ZSHRC"
-        return 0
-      fi
-    done
-
-    plugin_list+=("$plugin")
-    sed -i "s|^plugins=.*|plugins=(${plugin_list[*]})|" "$ZSHRC"
-    success "Enabled $plugin in $ZSHRC"
-  else
-    ensure_line_in_file "$ZSHRC" "plugins=(git $plugin)"
-    success "Added plugins=(git $plugin) to $ZSHRC"
-  fi
-}
-
-cleanup_legacy_zsh_autosuggestions_source() {
-  [[ -f "$ZSHRC" ]] || return 0
-
-  if grep -Fxq 'source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh' "$ZSHRC"; then
-    sed -i '\|^source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh$|d' "$ZSHRC"
-    success "Removed legacy zsh-autosuggestions source line from $ZSHRC"
-  fi
-}
-
-ensure_login_shell_is_allowed() {
-  local shell_path="$1"
-
-  [[ -n "$shell_path" ]] || return 0
-  [[ -f /etc/shells ]] || return 0
-
-  if ! grep -Fxq "$shell_path" /etc/shells; then
-    printf '%s\n' "$shell_path" | sudo tee -a /etc/shells >/dev/null
-    success "Added $shell_path to /etc/shells"
-  fi
-}
-
-configure_kitty_shell() {
-  local kitty_conf="$DEST_CONFIG/kitty/kitty.conf"
-  local zsh_path=""
-
-  [[ -f "$kitty_conf" ]] || return 0
-  zsh_path="$(command -v zsh 2>/dev/null || true)"
-  [[ -n "$zsh_path" ]] || return 0
-
-  if grep -Fxq "shell $zsh_path" "$kitty_conf"; then
-    info "Kitty shell is already zsh"
-    return 0
-  fi
-
-  if grep -Eq '^[#[:space:]]*shell[[:space:]]+' "$kitty_conf"; then
-    sed -i "s|^[#[:space:]]*shell[[:space:]].*|shell $zsh_path|" "$kitty_conf"
-  else
-    printf '\nshell %s\n' "$zsh_path" >> "$kitty_conf"
-  fi
-
-  success "Configured Kitty to launch zsh"
-}
-
-configure_pacman_options() {
-  local tmp_file=""
-
-  tmp_file="$(mktemp)"
-  awk '
-    /^\[options\]$/ {
-      in_options=1
-      print
-      next
-    }
-
-    /^\[/ && in_options {
-      if (!candy_seen && !candy_added) {
-        print "ILoveCandy"
-        candy_added=1
-      }
-      in_options=0
-    }
-
-    in_options && /^[[:space:]]*#Color[[:space:]]*$/ {
-      $0="Color"
-    }
-
-    in_options && /^[[:space:]]*ILoveCandy[[:space:]]*$/ {
-      candy_seen=1
-    }
-
-    {
-      print
-      if (in_options && /^[[:space:]]*Color[[:space:]]*$/ && !candy_seen && !candy_added) {
-        print "ILoveCandy"
-        candy_added=1
-      }
-    }
-
-    END {
-      if (in_options && !candy_seen && !candy_added) {
-        print "ILoveCandy"
-      }
-    }
-  ' /etc/pacman.conf > "$tmp_file"
-
-  sudo install -m644 "$tmp_file" /etc/pacman.conf
-  rm -f "$tmp_file"
-  success "Enabled Pacman color output and ILoveCandy"
-}
-
-multilib_enabled() {
-  awk '
-    /^\[multilib\]$/ { in_multilib=1; next }
-    /^\[/ { in_multilib=0 }
-    in_multilib && /^[[:space:]]*Include[[:space:]]*=/ { found=1 }
-    END { exit(found ? 0 : 1) }
-  ' /etc/pacman.conf
-}
-
-prompt_cpu_driver_packages() {
-  CPU_PACKAGES=()
-  CPU_DRIVER_LABEL="No extra CPU microcode packages"
-
-  if [[ ! -t 0 || ! -t 1 ]]; then
-    info "Non-interactive session detected; skipping CPU driver selection."
-    return 0
-  fi
-
-  echo ""
-  info "Choose the CPU support packages you want:"
-  echo "  1) AMD"
-  echo "  2) Intel"
-  echo "  3) Virtual machine / generic"
-  echo "  4) Skip extra CPU packages"
-
-  while true; do
-    read -r -p "Enter your choice [1-4]: " cpu_choice
-
-    case "$cpu_choice" in
-      1)
-        CPU_DRIVER_LABEL="AMD"
-        CPU_PACKAGES=(
-          amd-ucode
+        local args=(
+            -a
+            --checksum
+            --mkpath
         )
-        break
-        ;;
-      2)
-        CPU_DRIVER_LABEL="Intel"
-        CPU_PACKAGES=(
-          intel-ucode
-        )
-        break
-        ;;
-      3)
-        CPU_DRIVER_LABEL="Virtual machine / generic"
-        CPU_PACKAGES=()
-        break
-        ;;
-      4)
-        break
-        ;;
-      *)
-        warn "Invalid selection. Please choose a number from 1 to 4."
-        ;;
-    esac
-  done
 
-  if (( ${#CPU_PACKAGES[@]} > 0 )); then
-    success "Selected CPU package set: $CPU_DRIVER_LABEL"
-    info "CPU packages: ${CPU_PACKAGES[*]}"
-  else
-    info "Skipping extra CPU packages."
-  fi
-}
-
-prompt_gpu_driver_packages() {
-  GPU_PACKAGES=()
-  GPU_DRIVER_LABEL="No extra GPU driver packages"
-  local include_multilib=0
-
-  if multilib_enabled; then
-    include_multilib=1
-  else
-    info "multilib is not enabled; skipping 32-bit graphics packages."
-  fi
-
-  if [[ ! -t 0 || ! -t 1 ]]; then
-    info "Non-interactive session detected; skipping GPU driver selection."
-    return 0
-  fi
-
-  echo ""
-  info "Choose the graphics driver stack you want:"
-  echo "  1) AMD"
-  echo "  2) Intel"
-  echo "  3) NVIDIA"
-  echo "  4) Virtual machine / software rendering"
-  echo "  5) Skip extra GPU drivers"
-
-  while true; do
-    read -r -p "Enter your choice [1-5]: " gpu_choice
-
-    case "$gpu_choice" in
-      1)
-        GPU_DRIVER_LABEL="AMD"
-        GPU_PACKAGES=(
-          mesa
-          libvdpau
-          libvdpau-va-gl
-          libva-utils
-          vulkan-icd-loader
-          vulkan-radeon
-          vdpauinfo
-          vulkan-tools
-        )
-        if (( include_multilib )); then
-          GPU_PACKAGES+=(
-            lib32-mesa
-            lib32-vulkan-icd-loader
-            lib32-vulkan-radeon
-          )
+        if preserve_existing_enabled; then
+            args+=(--ignore-existing)
         fi
-        break
-        ;;
-      2)
-        GPU_DRIVER_LABEL="Intel"
-        GPU_PACKAGES=(
-          intel-media-driver
-          libvdpau
-          libva-utils
-          mesa
-          vulkan-icd-loader
-          vulkan-intel
-          vdpauinfo
-          vulkan-tools
-        )
-        if (( include_multilib )); then
-          GPU_PACKAGES+=(
-            lib32-mesa
-            lib32-vulkan-icd-loader
-            lib32-vulkan-intel
-          )
-        fi
-        break
-        ;;
-      3)
-        GPU_DRIVER_LABEL="NVIDIA"
-        GPU_PACKAGES=(
-          libva-nvidia-driver
-          libva-utils
-          libvdpau
-          nvidia-open
-          nvidia-utils
-          nvidia-settings
-          vdpauinfo
-          vulkan-icd-loader
-          vulkan-tools
-        )
-        if (( include_multilib )); then
-          GPU_PACKAGES+=(
-            lib32-vulkan-icd-loader
-            lib32-nvidia-utils
-          )
-        fi
-        break
-        ;;
-      4)
-        GPU_DRIVER_LABEL="Virtual machine / software rendering"
-        GPU_PACKAGES=(
-          libvdpau
-          libvdpau-va-gl
-          libva-utils
-          mesa
-          vulkan-icd-loader
-          vulkan-swrast
-          vdpauinfo
-          vulkan-tools
-        )
-        if (( include_multilib )); then
-          GPU_PACKAGES+=(
-            lib32-mesa
-            lib32-vulkan-icd-loader
-            lib32-vulkan-swrast
-          )
-        fi
-        break
-        ;;
-      5)
-        break
-        ;;
-      *)
-        warn "Invalid selection. Please choose a number from 1 to 5."
-        ;;
-    esac
-  done
 
-  if (( ${#GPU_PACKAGES[@]} > 0 )); then
-    success "Selected GPU driver set: $GPU_DRIVER_LABEL"
-    info "GPU packages: ${GPU_PACKAGES[*]}"
-  else
-    info "Skipping extra GPU driver packages."
-  fi
+        rsync \
+            "${args[@]}" \
+            "$DOTCONFIG/local_bin/" \
+            "$LOCAL_BIN/"
+
+        find "$LOCAL_BIN" \
+            -maxdepth 1 \
+            -type f \
+            -exec chmod +x {} +
+
+        success "Installed local helper scripts."
+    fi
+
+    # Local desktop files
+    if [[ -d "$DOTCONFIG/local_share/applications" ]]; then
+        mkdir -p "$LOCAL_SHARE/applications"
+
+        local args=(
+            -a
+            --checksum
+            --mkpath
+        )
+
+        if preserve_existing_enabled; then
+            args+=(--ignore-existing)
+        fi
+
+        rsync \
+            "${args[@]}" \
+            "$DOTCONFIG/local_share/applications/" \
+            "$LOCAL_SHARE/applications/"
+
+        success "Installed local desktop entries."
+    fi
+
+    # KDE color schemes
+    if [[ -d "$DOTCONFIG/kde-color-schemes" ]]; then
+        mkdir -p "$LOCAL_SHARE/color-schemes"
+
+        local args=(
+            -a
+            --checksum
+            --mkpath
+        )
+
+        if preserve_existing_enabled; then
+            args+=(--ignore-existing)
+        fi
+
+        rsync \
+            "${args[@]}" \
+            "$DOTCONFIG/kde-color-schemes/" \
+            "$LOCAL_SHARE/color-schemes/"
+
+        success "Installed KDE color schemes."
+    fi
 }
 
-enable_user_service() {
-  local unit="$1"
+# ----------------------------------------------------------------------------
+# User path normalization
+# ----------------------------------------------------------------------------
 
-  if ! systemctl --user list-unit-files >/dev/null 2>&1; then
-    warn "User systemd instance is unavailable; skipping $unit"
-    return 0
-  fi
+normalize_paths() {
+    section "Normalizing user paths"
 
-  if systemctl --user list-unit-files | awk '{print $1}' | grep -Fxq "$unit"; then
-    systemctl --user enable --now "$unit"
-    success "Enabled user service: $unit"
-  else
-    warn "User service $unit not found, skipping"
-  fi
+    local dolphinrc="$HOME_CONFIG/dolphinrc"
+    local bookmarks="$HOME_CONFIG/gtk-3.0/bookmarks"
+
+    if [[ -f "$dolphinrc" ]]; then
+        sed -i \
+            -E \
+            "s|^HomeUrl=file:///home/[^/[:space:]]*|HomeUrl=file://$HOME|" \
+            "$dolphinrc" || true
+    fi
+
+    if [[ -f "$bookmarks" ]]; then
+        sed -i \
+            -E \
+            "s|file:///home/[^/]*/|file://$HOME/|g" \
+            "$bookmarks" || true
+    fi
 }
 
-install_font_fallback_config() {
-  local fontconfig_dir="$DEST_CONFIG/fontconfig/conf.d"
-  local fontconfig_file="$fontconfig_dir/75-font-fallbacks.conf"
-  local tmp_file=""
+# ----------------------------------------------------------------------------
+# Font configuration
+# ----------------------------------------------------------------------------
 
-  mkdir -p "$fontconfig_dir"
+install_font_config() {
+    section "Configuring fonts"
 
-  tmp_file="$(mktemp)"
-  cat > "$tmp_file" <<'EOF'
+    local dir="$HOME_CONFIG/fontconfig/conf.d"
+    local file="$dir/75-driftfe-fallbacks.conf"
+
+    mkdir -p "$dir"
+
+    cat > "$file" <<'EOF'
 <?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
 <fontconfig>
+
   <alias>
     <family>sans-serif</family>
     <prefer>
@@ -972,7 +893,6 @@ install_font_fallback_config() {
       <family>Noto Sans Devanagari</family>
       <family>Noto Sans Thai</family>
       <family>Noto Color Emoji</family>
-      <family>WenQuanYi Zen Hei</family>
       <family>DejaVu Sans</family>
       <family>Liberation Sans</family>
     </prefer>
@@ -990,8 +910,6 @@ install_font_fallback_config() {
       <family>Noto Serif Hebrew</family>
       <family>Noto Serif Devanagari</family>
       <family>Noto Color Emoji</family>
-      <family>Jigmo</family>
-      <family>IPAexMincho</family>
       <family>DejaVu Serif</family>
       <family>Liberation Serif</family>
     </prefer>
@@ -1017,419 +935,811 @@ install_font_fallback_config() {
       <family>Liberation Mono</family>
     </prefer>
   </alias>
+
 </fontconfig>
 EOF
 
-  install_generated_file_if_changed "$tmp_file" "$fontconfig_file" 644 "font fallback config"
+    fc-cache -f >/dev/null 2>&1 || true
+
+    success "Font fallback configuration installed."
 }
 
-install_pacman_packages() {
-  local pkg
+# ----------------------------------------------------------------------------
+# GTK defaults
+# ----------------------------------------------------------------------------
 
-  for pkg in "$@"; do
-    [[ -n "$pkg" ]] || continue
+install_gtk_defaults() {
+    section "Configuring GTK"
 
-    info "Installing pacman package: $pkg"
-    if sudo pacman -S --needed --noconfirm "$pkg"; then
-      success "Installed pacman package: $pkg"
-    else
-      warn "Failed to install pacman package: $pkg"
-      FAILED_PACMAN_PACKAGES+=("$pkg")
+    local gtk3="$HOME_CONFIG/gtk-3.0/settings.ini"
+    local gtk4="$HOME_CONFIG/gtk-4.0/settings.ini"
+
+    mkdir -p \
+        "$(dirname "$gtk3")" \
+        "$(dirname "$gtk4")"
+
+    local tmp
+    tmp="$(mktemp)"
+
+    cat > "$tmp" <<'EOF'
+[Settings]
+gtk-theme-name=adw-gtk3-dark
+gtk-application-prefer-dark-theme=true
+gtk-cursor-theme-name=Bibata-Modern-Classic
+gtk-cursor-theme-size=24
+gtk-font-name=Noto Sans, 10
+gtk-icon-theme-name=Adwaita
+gtk-decoration-layout=icon:minimize,maximize,close
+gtk-enable-animations=true
+gtk-primary-button-warps-slider=true
+EOF
+
+    if config_override_enabled || [[ ! -f "$gtk3" ]]; then
+        install -m 644 "$tmp" "$gtk3"
     fi
-  done
-}
 
-install_aur_packages() {
-  local pkg
-
-  for pkg in "$@"; do
-    [[ -n "$pkg" ]] || continue
-
-    info "Installing AUR package: $pkg"
-    if yay -S --needed --noconfirm --answerclean All --answerdiff None "$pkg"; then
-      success "Installed AUR package: $pkg"
-    else
-      warn "Failed to install AUR package: $pkg"
-      FAILED_AUR_PACKAGES+=("$pkg")
+    if config_override_enabled || [[ ! -f "$gtk4" ]]; then
+        install -m 644 "$tmp" "$gtk4"
     fi
-  done
+
+    rm -f "$tmp"
+
+    success "GTK defaults configured."
 }
 
-print_package_failure_summary() {
-  if (( ${#FAILED_PACMAN_PACKAGES[@]} == 0 && ${#FAILED_AUR_PACKAGES[@]} == 0 )); then
-    success "All requested packages installed successfully"
-    return 0
-  fi
+# ----------------------------------------------------------------------------
+# KDE / Dolphin integration
+# ----------------------------------------------------------------------------
 
-  warn "Some packages failed to install"
+configure_kde() {
+    section "Configuring KDE integration"
 
-  if (( ${#FAILED_PACMAN_PACKAGES[@]} > 0 )); then
-    warn "Pacman failures: ${FAILED_PACMAN_PACKAGES[*]}"
-  fi
+    local kiorc="$HOME_CONFIG/kiorc"
 
-  if (( ${#FAILED_AUR_PACKAGES[@]} > 0 )); then
-    warn "AUR failures: ${FAILED_AUR_PACKAGES[*]}"
-  fi
+    touch "$kiorc"
+
+    if grep -q '^\[General\]' "$kiorc"; then
+        if grep -q '^TerminalApplication=' "$kiorc"; then
+            sed -i \
+                's|^TerminalApplication=.*|TerminalApplication=kitty|' \
+                "$kiorc"
+        else
+            sed -i \
+                '/^\[General\]/a TerminalApplication=kitty' \
+                "$kiorc"
+        fi
+
+        if grep -q '^TerminalService=' "$kiorc"; then
+            sed -i \
+                's|^TerminalService=.*|TerminalService=kitty.desktop|' \
+                "$kiorc"
+        else
+            sed -i \
+                '/^\[General\]/a TerminalService=kitty.desktop' \
+                "$kiorc"
+        fi
+    else
+        cat >> "$kiorc" <<'EOF'
+
+[General]
+TerminalApplication=kitty
+TerminalService=kitty.desktop
+EOF
+    fi
+
+    if have xdg-mime; then
+        xdg-mime default org.kde.dolphin.desktop inode/directory || true
+    fi
+
+    if have update-mime-database; then
+        sudo update-mime-database /usr/share/mime >/dev/null 2>&1 || true
+    fi
+
+    if have kbuildsycoca6; then
+        kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
+    fi
+
+    success "KDE/Dolphin integration configured."
 }
 
-trap cleanup EXIT
+# ----------------------------------------------------------------------------
+# Bluetooth
+# ----------------------------------------------------------------------------
 
-print_banner
+configure_bluetooth() {
+    section "Configuring Bluetooth"
 
-if [[ $EUID -eq 0 ]]; then
-  err "Do not run this installer as root. Run it as your normal user."
-fi
+    local conf="/etc/bluetooth/main.conf"
 
-have_cmd pacman || err "This installer supports Arch Linux only."
+    [[ -f "$conf" ]] || {
+        warn "Bluetooth configuration file not found."
+        return
+    }
 
-section "Getting ready"
-log "Refreshing sudo credentials..."
-sudo -v
+    local tmp
+    tmp="$(mktemp)"
 
-SRC_DOTCONFIG="$script_dir/dot_config"
-DEST_CONFIG="$HOME/.config"
-ZSHRC="$HOME/.zshrc"
+    awk '
+        BEGIN { changed=0 }
 
-if [[ ! -d "$SRC_DOTCONFIG" ]]; then
-  warn "dot_config directory not found next to install.sh."
+        /^[[:space:]]*#?[[:space:]]*AutoEnable[[:space:]]*=/ {
+            print "AutoEnable=true"
+            changed=1
+            next
+        }
 
-  if ! have_cmd git; then
-    info "Installing git so the repository can be fetched"
-    install_pacman_packages git
-    have_cmd git || err "git is required to clone the dotfiles repository."
-  fi
+        { print }
 
-  WORK_DIR="$(mktemp -d)"
-  info "Cloning dotfiles repository..."
-  git clone --depth=1 "$REPO_URL" "$WORK_DIR/repo"
+        END {
+            if (!changed) {
+                print ""
+                print "[Policy]"
+                print "AutoEnable=true"
+            }
+        }
+    ' "$conf" > "$tmp"
 
-  REPO_ROOT="$WORK_DIR/repo"
-  SRC_DOTCONFIG="$REPO_ROOT/dot_config"
-  [[ -d "$SRC_DOTCONFIG" ]] || err "dot_config directory not found in cloned repository."
-fi
+    sudo install -m 644 "$tmp" "$conf"
+    rm -f "$tmp"
 
-PACMAN_PACKAGES=(
-  git
-  jq
-  neovim
-  python
-  zsh
-  adw-gtk-theme
-  gnome-themes-extra
-  rsync
-  curl
-  wget
-  unzip
-  base-devel
-  kitty
-  hyprland
-  awww
-  hyprlock
-  waybar
-  wofi
-  mako
-  libnotify
-  wl-clipboard
-  cliphist
-  brightnessctl
-  grim
-  slurp
-  dolphin
-  mpv
-  imv
-  archlinux-xdg-menu
-  kio
-  kservice
-  shared-mime-info
-  networkmanager
-  network-manager-applet
-  pipewire
-  pipewire-alsa
-  pipewire-pulse
-  wireplumber
-  pavucontrol
-  bluez
-  bluez-utils
-  blueman
-  gdm
-  gnome-session
-  gnome-shell
-  gnome-desktop-4
-  gsettings-desktop-schemas
-  gsettings-system-schemas
-  mutter
-  touchegg
-  xsettingsd
-  qt5ct
-  gnome-keyring
-  udisks2
-  playerctl
-  cava
-  fontconfig
-  noto-fonts
-  noto-fonts-cjk
-  noto-fonts-emoji
-  noto-fonts-extra
-  ttf-indic-otf
-  otf-ipaexfont
-  ttf-jigmo
-  wqy-zenhei
-  wqy-microhei
-  ttf-roboto
-  ttf-jetbrains-mono
-  ttf-dejavu
-  ttf-liberation
-  ttf-nerd-fonts-symbols
-  ttf-font-awesome
-  gnu-free-fonts
-  xdg-desktop-portal
-  xdg-desktop-portal-hyprland
-  xdg-user-dirs
-  ripgrep
-  fd
-  polkit-gnome
-)
+    success "Bluetooth AutoEnable configured."
+}
 
-AUR_PACKAGES=(
-  wlogout
-  waypaper
-  youtubemusic
-  vesktop-bin
-  zen-browser-bin
-  ttf-meslo-nerd-font-powerlevel10k
-  gpu-screen-recorder
-  nerd-fonts-jetbrains-mono
-  grimblast-git
-  swappy
-  bibata-cursor-theme
-  hyprpicker
-  adw-gtk3
-  cbonsai
-)
+# ----------------------------------------------------------------------------
+# Services
+# ----------------------------------------------------------------------------
 
-section "System update"
-log "Configuring pacman options..."
-configure_pacman_options
-log "Updating system..."
-sudo pacman -Syu --noconfirm
+enable_system_service() {
+    local unit="$1"
 
-section "Hardware setup"
-prompt_cpu_driver_packages
-prompt_gpu_driver_packages
+    if systemctl list-unit-files "$unit" >/dev/null 2>&1; then
+        sudo systemctl unmask "$unit" >/dev/null 2>&1 || true
+        sudo systemctl enable "$unit"
+        success "Enabled $unit"
+    else
+        warn "System service not found: $unit"
+    fi
+}
 
-section "Pacman packages"
-log "Installing pacman packages..."
-install_pacman_packages "${PACMAN_PACKAGES[@]}" "${CPU_PACKAGES[@]}" "${GPU_PACKAGES[@]}"
+disable_conflicting_display_managers() {
+    local dm
 
-section "Schemas and configs"
-log "Rebuilding GSettings schemas..."
-sudo glib-compile-schemas /usr/share/glib-2.0/schemas
+    for dm in sddm lightdm; do
+        if systemctl list-unit-files "${dm}.service" \
+            >/dev/null 2>&1; then
 
-mkdir -p "$DEST_CONFIG"
+            if systemctl is-enabled "${dm}.service" \
+                >/dev/null 2>&1; then
 
-validate_source_dotfiles
+                sudo systemctl disable "${dm}.service"
+                success "Disabled ${dm}.service"
+            fi
+        fi
+    done
+}
 
-log "Copying dotfiles into $DEST_CONFIG..."
-sync_dotfiles
-install_zshrc
-normalize_user_config_paths
-install_mimeapps_defaults
-install_local_bin_files
-install_local_applications
-configure_kitty_shell
+configure_gdm() {
+    section "Configuring GDM"
 
-log "Installing font fallback preferences..."
-install_font_fallback_config
-install_gtk_defaults
-install_kde_theme_files
-install_kio_defaults
-configure_kde_application_menu
+    disable_conflicting_display_managers
+    enable_system_service NetworkManager.service
+    enable_system_service bluetooth.service
+    enable_system_service gdm.service
 
-if ! have_cmd yay; then
-  section "AUR helper"
-  log "Installing yay..."
-  TMP_DIR="$(mktemp -d)"
-  git clone https://aur.archlinux.org/yay.git "$TMP_DIR/yay"
-  (
-    cd "$TMP_DIR/yay"
-    makepkg -si --noconfirm
-  )
-fi
+    if systemctl list-unit-files graphical.target \
+        >/dev/null 2>&1; then
 
-if (( ${#AUR_PACKAGES[@]} > 0 )); then
-  section "AUR packages"
-  log "Installing AUR packages..."
-  install_aur_packages "${AUR_PACKAGES[@]}"
-fi
+        sudo systemctl set-default graphical.target
+    fi
 
-section "System services"
-log "Enabling system services..."
-configure_bluetooth_defaults
-disable_system_service_if_enabled "sddm.service"
-disable_system_service_if_enabled "lightdm.service"
-enable_system_service "NetworkManager.service"
-enable_system_service "bluetooth.service"
-enable_system_service "gdm.service"
-enable_system_service "touchegg.service"
-enable_system_service "udisks2.service"
-set_system_default_target "graphical.target"
-install_hyprland_session_for_gdm
-set_default_gdm_session "hyprland"
+    success "GDM configured."
+}
 
-log "Creating swww compatibility symlinks for Waypaper..."
-sudo ln -sf /usr/bin/awww /usr/bin/swww
-sudo ln -sf /usr/bin/awww-daemon /usr/bin/swww-daemon
-success "Waypaper compatibility symlinks are in place"
+configure_touchegg() {
+    if systemctl list-unit-files touchegg.service \
+        >/dev/null 2>&1; then
 
-log "Installing NeoVim config
-rm -rf ~/.config/nvim
-ln -sfn "$(pwd)/dot-config/nvim" "$HOME/.config/nvim"
+        sudo systemctl enable touchegg.service
+        success "Touchégg enabled."
+    else
+        warn "touchegg.service not found."
+    fi
+}
 
-section "User services"
-log "Enabling user services..."
-systemctl --user disable --now pulseaudio.service pulseaudio.socket 2>/dev/null || true
-systemctl --user mask pulseaudio.service pulseaudio.socket 2>/dev/null || true
-enable_user_service "pipewire.service"
-enable_user_service "pipewire-pulse.service"
-enable_user_service "wireplumber.service"
-enable_user_service "xsettingsd.service"
-enable_user_service "gnome-keyring-daemon.service"
-enable_user_service "xdg-desktop-portal.service"
-enable_user_service "xdg-desktop-portal-hyprland.service"
-print_package_failure_summary
+configure_udisks() {
+    if systemctl list-unit-files udisks2.service \
+        >/dev/null 2>&1; then
 
-section "Permissions"
-log "Setting executable permissions on scripts..."
-SCRIPT_DIRS=(
-  "$DEST_CONFIG/waybar/scripts"
-  "$DEST_CONFIG/hypr/scripts"
-  "$DEST_CONFIG/wofi/scripts"
-  "$script_dir"
-)
+        sudo systemctl enable udisks2.service
+        success "udisks2 enabled."
+    fi
+}
 
-for dir in "${SCRIPT_DIRS[@]}"; do
-  if [[ -d "$dir" ]]; then
-    info "chmod +x on *.sh in $dir"
-    find "$dir" -type f -name "*.sh" -exec chmod +x {} +
-    info "chmod +x on *.py in $dir"
-    find "$dir" -type f -name "*.py" -exec chmod +x {} +
-  fi
-done
+install_polkit_agent_autostart() {
+    local autostart_dir="$HOME_CONFIG/autostart"
+    local desktop_file="/usr/share/applications/polkit-gnome-authentication-agent-1.desktop"
 
-chmod +x "$script_dir/install.sh" 2>/dev/null || true
+    [[ -f "$desktop_file" ]] || return 0
 
-if have_cmd gsettings; then
-  section "Theme defaults"
-  log "Applying dark GTK theme and cursor defaults..."
-  gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' || true
-  gsettings set org.gnome.desktop.interface gtk-theme 'adw-gtk3-dark' || true
-  gsettings set org.gnome.desktop.interface icon-theme 'Adwaita' || true
-  gsettings set org.gnome.desktop.interface cursor-theme 'Bibata-Modern-Classic' || true
-  gsettings set org.gnome.desktop.interface cursor-size 24 || true
-fi
+    mkdir -p "$autostart_dir"
 
-mkdir -p "$HOME/Pictures/Screenshots"
-success "Ensured ~/Pictures/Screenshots exists"
+    if [[ ! -f "$autostart_dir/polkit-gnome-authentication-agent-1.desktop" ||
+          "$FORCE_CONFIG_OVERRIDES" == "1" ]]; then
 
-section "Zsh setup"
-log "Configuring Zsh..."
-if have_cmd zsh && [[ "$SHELL" != "$(command -v zsh)" ]]; then
-  ensure_login_shell_is_allowed "$(command -v zsh)"
-  chsh -s "$(command -v zsh)" "$USER" || warn "Could not change default shell to zsh"
-fi
+        cp "$desktop_file" \
+            "$autostart_dir/polkit-gnome-authentication-agent-1.desktop"
+    fi
 
-if [[ ! -d "$HOME/.oh-my-zsh" ]]; then
-  info "Installing Oh My Zsh..."
-  RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c \
-    "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" \
-    --unattended
-fi
+    success "Polkit authentication agent configured."
+}
 
-log "Installing Powerlevel10k..."
-P10K_DIR="$HOME/.oh-my-zsh/custom/themes/powerlevel10k"
-if [[ ! -d "$P10K_DIR" ]]; then
-  git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$P10K_DIR"
-fi
+# ----------------------------------------------------------------------------
+# Hyprland session
+# ----------------------------------------------------------------------------
 
-if [[ -f "$ZSHRC" ]]; then
-  configure_zsh_theme
-fi
+configure_hyprland_gdm_session() {
+    section "Configuring Hyprland session"
 
-log "Installing Zsh plugins..."
-ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
-mkdir -p "$ZSH_CUSTOM/plugins"
+    local session_dir="/usr/share/wayland-sessions"
+    local session="$session_dir/hyprland.desktop"
 
-if [[ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ]]; then
-  info "Installing zsh-autosuggestions..."
-  git clone https://github.com/zsh-users/zsh-autosuggestions \
-    "$ZSH_CUSTOM/plugins/zsh-autosuggestions"
-fi
+    sudo mkdir -p "$session_dir"
 
-if [[ -f "$ZSHRC" ]]; then
-  ensure_zsh_plugin_enabled "zsh-autosuggestions"
-  cleanup_legacy_zsh_autosuggestions_source
-fi
+    if [[ -f "$session" ]]; then
+        success "Hyprland GDM session already exists."
+        return
+    fi
 
-section "Desktop defaults"
-if have_cmd xdg-mime; then
-  set_media_mime_defaults
+    local candidate
 
-  if config_overrides_enabled; then
-    log "Setting Dolphin as the default file manager..."
-    xdg-mime default org.kde.dolphin.desktop inode/directory || true
-    xdg-mime default org.kde.dolphin.desktop application/x-gnome-saved-search || true
-  else
-    info "Keeping existing default file manager associations"
-  fi
-fi
-rebuild_kde_service_cache
+    for candidate in \
+        /usr/share/hyprland/hyprland.desktop \
+        /usr/share/wayland-sessions/hyprland.desktop
+    do
+        if [[ -f "$candidate" ]]; then
+            sudo install -m 644 "$candidate" "$session"
+            success "Installed Hyprland GDM session."
+            return
+        fi
+    done
 
-if have_cmd xdg-user-dirs-update; then
-  xdg-user-dirs-update
-fi
+    warn "Could not locate a Hyprland session desktop file."
+}
 
-if have_cmd fc-cache; then
-  log "Rebuilding font cache..."
-  fc-cache -f
-fi
+# ----------------------------------------------------------------------------
+# PipeWire
+# ----------------------------------------------------------------------------
 
-section "Validation"
-log "Validating core commands used by the dotfiles..."
-missing_commands=()
-for cmd in hyprland waybar wlogout wofi mako wl-copy wl-paste cliphist blueman-applet bluetoothctl \
-  udisksctl playerctl hyprpicker grimblast swappy awww-daemon dolphin hyprlock mpv imv; do
-  have_cmd "$cmd" || missing_commands+=("$cmd")
-done
+configure_pipewire() {
+    section "Configuring PipeWire"
 
-if (( ${#missing_commands[@]} > 0 )); then
-  warn "Some expected commands are still missing: ${missing_commands[*]}"
-else
-  success "Core dotfile dependencies look good"
-fi
+    # PipeWire and WirePlumber are normally managed as user services.
+    # Enable them so they are available immediately after login.
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
 
-if [[ ! -x /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 ]]; then
-  warn "polkit-gnome authentication agent is missing; some Bluetooth or privilege dialogs may not appear in Hyprland"
-fi
+    for unit in \
+        pipewire.service \
+        pipewire-pulse.service \
+        wireplumber.service
+    do
+        if systemctl --user list-unit-files "$unit" \
+            >/dev/null 2>&1; then
 
-echo ""
-success "Installation complete!"
-if config_overrides_enabled; then
-  info "Applied config overrides because FORCE_CONFIG_OVERRIDES=1 was set."
-elif preserve_existing_configs_enabled; then
-  info "Preserved existing config files because PRESERVE_EXISTING_CONFIGS=1 was set."
-else
-  info "Update mode synced files whose content changed and skipped files already current."
-fi
-if (( ${#CPU_PACKAGES[@]} > 0 )); then
-  info "CPU package choice: ${CPU_DRIVER_LABEL:-custom}"
-fi
-if (( ${#GPU_PACKAGES[@]} > 0 )); then
-  info "GPU package choice: ${GPU_DRIVER_LABEL:-custom}"
-fi
-info "Reboot or log out and back in so shell, services, and desktop changes fully apply."
-if [[ -t 0 && -t 1 ]] && have_cmd zsh; then
-  info "Launching an interactive zsh so Powerlevel10k can finish setup..."
-  zsh -ic 'source ~/.zshrc' || true
-else
-  info "Open a new zsh session or run 'source ~/.zshrc' to launch the Powerlevel10k wizard."
-fi
+            systemctl --user enable --now "$unit" || \
+                warn "Could not enable $unit"
+        fi
+    done
+
+    # Remove an old PulseAudio user service if one exists.
+    systemctl --user disable \
+        --now pulseaudio.service \
+        pulseaudio.socket \
+        >/dev/null 2>&1 || true
+
+    systemctl --user mask \
+        pulseaudio.service \
+        pulseaudio.socket \
+        >/dev/null 2>&1 || true
+
+    success "PipeWire/WirePlumber configured."
+}
+
+# ----------------------------------------------------------------------------
+# Portals
+# ----------------------------------------------------------------------------
+
+configure_portals() {
+    section "Configuring desktop portals"
+
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
+
+    for unit in \
+        xdg-desktop-portal.service \
+        xdg-desktop-portal-hyprland.service
+    do
+        if systemctl --user list-unit-files "$unit" \
+            >/dev/null 2>&1; then
+
+            # Portals may be socket/D-Bus activated. If enable is supported,
+            # enable it, but do not make installation fail if activation is
+            # handled automatically by the package.
+            systemctl --user enable "$unit" \
+                >/dev/null 2>&1 || true
+        fi
+    done
+
+    success "Desktop portals configured."
+}
+
+# ----------------------------------------------------------------------------
+# Zsh / Oh My Zsh / P10k
+# ----------------------------------------------------------------------------
+
+configure_zsh_theme() {
+    [[ -f "$ZSHRC" ]] || return
+
+    local desired='ZSH_THEME="powerlevel10k/powerlevel10k"'
+
+    if grep -q '^ZSH_THEME=' "$ZSHRC"; then
+        sed -i \
+            's|^ZSH_THEME=.*|ZSH_THEME="powerlevel10k/powerlevel10k"|' \
+            "$ZSHRC"
+    else
+        printf '\n%s\n' "$desired" >> "$ZSHRC"
+    fi
+
+    success "Powerlevel10k selected."
+}
+
+ensure_zsh_plugin() {
+    local plugin="$1"
+    local line
+    local existing
+
+    [[ -f "$ZSHRC" ]] || return
+
+    if grep -q '^plugins=' "$ZSHRC"; then
+        line="$(grep '^plugins=' "$ZSHRC" | head -n1)"
+        existing="${line#plugins=}"
+        existing="${existing#\(}"
+        existing="${existing%\)}"
+
+        if grep -qw "$plugin" <<< "$existing"; then
+            return
+        fi
+
+        sed -i \
+            "s|^plugins=.*|plugins=($existing $plugin)|" \
+            "$ZSHRC"
+    else
+        printf 'plugins=(git %s)\n' "$plugin" >> "$ZSHRC"
+    fi
+
+    success "Enabled Zsh plugin: $plugin"
+}
+
+configure_zsh() {
+    (( SKIP_ZSH == 0 )) ||
+        return 0
+
+    section "Configuring Zsh"
+
+    have zsh || {
+        warn "zsh is not installed; skipping Zsh setup."
+        return
+    }
+
+    local zsh_path
+    zsh_path="$(command -v zsh)"
+
+    if [[ -f /etc/shells ]] &&
+       ! grep -Fxq "$zsh_path" /etc/shells; then
+
+        printf '%s\n' "$zsh_path" |
+            sudo tee -a /etc/shells >/dev/null
+    fi
+
+    if [[ "$SHELL" != "$zsh_path" ]]; then
+        chsh -s "$zsh_path" "$USER" ||
+            warn "Could not change the login shell to zsh."
+    fi
+
+    if [[ ! -d "$HOME/.oh-my-zsh" ]]; then
+        log "Installing Oh My Zsh..."
+
+        RUNZSH=no
+        CHSH=no
+        KEEP_ZSHRC=yes
+
+        export RUNZSH CHSH KEEP_ZSHRC
+
+        sh -c \
+            "$(curl -fsSL \
+            https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" \
+            "" \
+            --unattended
+    fi
+
+    local custom="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+    local p10k="$custom/themes/powerlevel10k"
+
+    if [[ ! -d "$p10k" ]]; then
+        log "Installing Powerlevel10k..."
+
+        git clone \
+            --depth=1 \
+            https://github.com/romkatv/powerlevel10k.git \
+            "$p10k"
+    fi
+
+    local autosuggestions="$custom/plugins/zsh-autosuggestions"
+
+    if [[ ! -d "$autosuggestions" ]]; then
+        log "Installing zsh-autosuggestions..."
+
+        git clone \
+            --depth=1 \
+            https://github.com/zsh-users/zsh-autosuggestions \
+            "$autosuggestions"
+    fi
+
+    configure_zsh_theme
+    ensure_zsh_plugin zsh-autosuggestions
+
+    # Remove the obsolete manual source line used by older versions
+    # of this installer.
+    if [[ -f "$ZSHRC" ]]; then
+        sed -i \
+            '\|^source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh$|d' \
+            "$ZSHRC"
+    fi
+
+    success "Zsh environment configured."
+}
+
+# ----------------------------------------------------------------------------
+# Kitty
+# ----------------------------------------------------------------------------
+
+configure_kitty() {
+    section "Configuring Kitty"
+
+    local kitty="$HOME_CONFIG/kitty/kitty.conf"
+
+    [[ -f "$kitty" ]] || return 0
+
+    local zsh_path
+    zsh_path="$(command -v zsh || true)"
+
+    [[ -n "$zsh_path" ]] || return 0
+
+    if grep -Eq '^[[:space:]]*shell[[:space:]]+' "$kitty"; then
+        sed -i \
+            "s|^[[:space:]]*shell[[:space:]].*|shell $zsh_path|" \
+            "$kitty"
+    else
+        printf '\nshell %s\n' "$zsh_path" >> "$kitty"
+    fi
+
+    success "Kitty configured to launch Zsh."
+}
+
+# ----------------------------------------------------------------------------
+# MIME defaults
+# ----------------------------------------------------------------------------
+
+configure_media_defaults() {
+    section "Configuring media defaults"
+
+    have xdg-mime || return 0
+
+    if [[ -f /usr/share/applications/mpv.desktop ]]; then
+        local mime
+
+        while IFS= read -r mime; do
+            [[ -n "$mime" ]] || continue
+            xdg-mime default mpv.desktop "$mime" || true
+        done < <(
+            sed -n 's/^MimeType=//p' \
+                /usr/share/applications/mpv.desktop |
+            tr ';' '\n'
+        )
+    fi
+
+    if [[ -f /usr/share/applications/imv.desktop ]]; then
+        local mime
+
+        while IFS= read -r mime; do
+            [[ -n "$mime" ]] || continue
+            xdg-mime default imv.desktop "$mime" || true
+        done < <(
+            sed -n 's/^MimeType=//p' \
+                /usr/share/applications/imv.desktop |
+            tr ';' '\n'
+        )
+    fi
+
+    success "Media associations configured."
+}
+
+# ----------------------------------------------------------------------------
+# GSettings
+# ----------------------------------------------------------------------------
+
+configure_gsettings() {
+    section "Configuring GNOME settings"
+
+    have gsettings || {
+        warn "gsettings not available."
+        return
+    }
+
+    gsettings set \
+        org.gnome.desktop.interface \
+        color-scheme \
+        'prefer-dark' || true
+
+    gsettings set \
+        org.gnome.desktop.interface \
+        gtk-theme \
+        'adw-gtk3-dark' || true
+
+    gsettings set \
+        org.gnome.desktop.interface \
+        icon-theme \
+        'Adwaita' || true
+
+    gsettings set \
+        org.gnome.desktop.interface \
+        cursor-theme \
+        'Bibata-Modern-Classic' || true
+
+    gsettings set \
+        org.gnome.desktop.interface \
+        cursor-size \
+        24 || true
+
+    success "GNOME settings applied."
+}
+
+# ----------------------------------------------------------------------------
+# Executable permissions
+# ----------------------------------------------------------------------------
+
+fix_permissions() {
+    section "Fixing script permissions"
+
+    local dirs=(
+        "$HOME_CONFIG/waybar/scripts"
+        "$HOME_CONFIG/hypr/scripts"
+        "$HOME_CONFIG/wofi/scripts"
+        "$LOCAL_BIN"
+    )
+
+    local dir
+
+    for dir in "${dirs[@]}"; do
+        [[ -d "$dir" ]] || continue
+
+        find "$dir" \
+            -type f \
+            \( -name '*.sh' -o -name '*.py' \) \
+            -exec chmod +x {} +
+    done
+
+    chmod +x "$REPO_ROOT/install.sh" 2>/dev/null || true
+
+    success "Executable permissions fixed."
+}
+
+# ----------------------------------------------------------------------------
+# GSettings schemas
+# ----------------------------------------------------------------------------
+
+compile_schemas() {
+    section "Rebuilding GSettings schemas"
+
+    if have glib-compile-schemas &&
+       [[ -d /usr/share/glib-2.0/schemas ]]; then
+
+        sudo glib-compile-schemas \
+            /usr/share/glib-2.0/schemas
+    fi
+
+    success "GSettings schemas rebuilt."
+}
+
+# ----------------------------------------------------------------------------
+# Validation
+# ----------------------------------------------------------------------------
+
+validate_installation() {
+    section "Final validation"
+
+    local commands=(
+        hyprland
+        hyprlock
+        waybar
+        kitty
+        zsh
+        wofi
+        mako
+        wl-copy
+        wl-paste
+        cliphist
+        brightnessctl
+        grim
+        slurp
+        dolphin
+        mpv
+        imv
+        bluetoothctl
+        blueman-applet
+        playerctl
+        awww
+        awww-daemon
+    )
+
+    local missing=()
+    local cmd
+
+    for cmd in "${commands[@]}"; do
+        have "$cmd" || missing+=("$cmd")
+    done
+
+    if (( ${#missing[@]} )); then
+        warn "Missing expected commands:"
+        printf '  %s\n' "${missing[@]}"
+    else
+        success "Core commands are available."
+    fi
+
+    if [[ -f "$HOME_CONFIG/waybar/config" ]] &&
+       have python3; then
+
+        python3 -m json.tool \
+            "$HOME_CONFIG/waybar/config" \
+            >/dev/null ||
+            warn "Installed Waybar config is not valid JSON."
+    fi
+
+    if have fc-match; then
+        info "Monospace font:"
+        fc-match monospace | head -n1 || true
+    fi
+
+    if systemctl --user is-active pipewire.service \
+        >/dev/null 2>&1; then
+
+        success "PipeWire is active."
+    else
+        warn "PipeWire is not currently active."
+    fi
+
+    if systemctl --user is-active wireplumber.service \
+        >/dev/null 2>&1; then
+
+        success "WirePlumber is active."
+    else
+        warn "WirePlumber is not currently active."
+    fi
+
+    if systemctl is-enabled gdm.service \
+        >/dev/null 2>&1; then
+
+        success "GDM is enabled."
+    else
+        warn "GDM is not enabled."
+    fi
+
+    if (( ${#AUR_FAILED[@]} )); then
+        warn "AUR packages that failed:"
+        printf '  %s\n' "${AUR_FAILED[@]}"
+    fi
+}
+
+# ----------------------------------------------------------------------------
+# Summary
+# ----------------------------------------------------------------------------
+
+print_summary() {
+    section "Installation summary"
+
+    printf '%bCPU%b: %s\n' "$CYAN" "$RESET" "$CPU_LABEL"
+    printf '%bGPU%b: %s\n' "$CYAN" "$RESET" "$GPU_LABEL"
+    printf '%bConfig%b: %s\n' "$CYAN" "$RESET" "$HOME_CONFIG"
+    printf '%bShell%b: %s\n' "$CYAN" "$RESET" "${SHELL:-unknown}"
+
+    if (( SKIP_AUR )); then
+        info "AUR installation was skipped."
+    fi
+
+    if (( SKIP_ZSH )); then
+        info "Zsh configuration was skipped."
+    fi
+
+    if (( SKIP_SERVICES )); then
+        info "Service configuration was skipped."
+    fi
+
+    if config_override_enabled; then
+        warn "FORCE_CONFIG_OVERRIDES=1 was used."
+    elif preserve_existing_enabled; then
+        info "Existing configuration files were preserved."
+    else
+        info "Existing files were updated only when repository content changed."
+    fi
+
+    echo
+    success "DriftFe dotfiles installation finished."
+
+    info "A reboot is recommended before judging the final desktop state."
+}
+
+# ----------------------------------------------------------------------------
+# Main
+# ----------------------------------------------------------------------------
+
+main() {
+    banner
+
+    check_environment
+
+    require_command sudo
+    require_command rsync
+    require_command git
+
+    sudo -v
+
+    enable_multilib
+    update_system
+
+    detect_cpu
+    detect_gpu
+
+    build_package_lists
+    install_required_packages
+
+    validate_source_configs
+
+    compile_schemas
+
+    sync_dotfiles
+    install_special_files
+    normalize_paths
+
+    install_font_config
+    install_gtk_defaults
+    configure_kde
+
+    if (( SKIP_SERVICES == 0 )); then
+        configure_bluetooth
+        configure_gdm
+        configure_hyprland_gdm_session
+        configure_touchegg
+        configure_udisks
+        install_polkit_agent_autostart
+        configure_pipewire
+        configure_portals
+    fi
+
+    configure_kitty
+
+    if (( SKIP_ZSH == 0 )); then
+        configure_zsh
+    fi
+
+    configure_media_defaults
+    configure_gsettings
+
+    fix_permissions
+
+    if (( SKIP_AUR == 0 )); then
+        install_aur_packages
+    fi
+
+    validate_installation
+    print_summary
+}
+
+main "$@"
