@@ -448,6 +448,12 @@ build_package_lists() {
         # Wallpaper
         awww
 
+        # Screen recording
+        gpu-screen-recorder
+
+        # GTK theme
+        adw-gtk-theme
+
         # Wayland utilities
         wl-clipboard
         cliphist
@@ -540,13 +546,11 @@ build_package_lists() {
     AUR_PACKAGES=(
         wlogout
         waypaper
-        youtubemusic
+        pear-desktop-bin
         vesktop-bin
         zen-browser-bin
-        gpu-screen-recorder
         grimblast-git
         bibata-cursor-theme
-        adw-gtk3
         cbonsai
     )
 }
