@@ -238,7 +238,8 @@ enable_multilib() {
                 }
             ' "$pacman_conf" > "$tmp"
 
-            install -m 644 "$tmp" "$pacman_conf"
+            # pacman.conf is root-owned, so only this write is elevated.
+            sudo install -m 644 "$tmp" "$pacman_conf"
             rm -f "$tmp"
 
             success "Enabled multilib."
@@ -303,7 +304,8 @@ configure_pacman() {
         }
     ' "$pacman_conf" > "$tmp"
 
-    install -m 644 "$tmp" "$pacman_conf"
+    # pacman.conf is root-owned, so only this write is elevated.
+    sudo install -m 644 "$tmp" "$pacman_conf"
     rm -f "$tmp"
 
     success "Configured pacman."
