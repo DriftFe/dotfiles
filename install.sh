@@ -427,12 +427,17 @@ build_package_lists() {
         neovim
         python
         python-pip
+        python-gobject
         zsh
         rsync
         curl
         wget
         unzip
         base-devel
+        fzf
+        fastfetch
+        starship
+        xdg-utils
 
         # Desktop / Hyprland
         hyprland
@@ -441,6 +446,8 @@ build_package_lists() {
         wofi
         mako
         libnotify
+        gtk4
+        hyprpicker
 
         # Terminal
         kitty
@@ -463,6 +470,7 @@ build_package_lists() {
 
         # File manager / media
         dolphin
+        nautilus
         mpv
         imv
 
@@ -528,7 +536,6 @@ build_package_lists() {
         ttf-dejavu
         ttf-liberation
         ttf-nerd-fonts-symbols
-        ttf-font-awesome
         gnu-free-fonts
 
         # Portals
@@ -541,6 +548,10 @@ build_package_lists() {
 
         # Screenshot editing
         swappy
+
+        # Applications
+        kdenlive
+        waydroid
     )
 
     AUR_PACKAGES=(
@@ -552,6 +563,9 @@ build_package_lists() {
         grimblast-git
         bibata-cursor-theme
         cbonsai
+        spotify
+        vscodium-bin
+        ttf-font-awesome-4
     )
 }
 
